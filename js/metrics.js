@@ -49,12 +49,12 @@ export function rates(t) {
 }
 
 export function outcomeDistribution(t) {
-  // 6 bậc rơi của funnel, telescoping về đúng tổng Contacted.
-  // Interviews có thể > Applications (nhiều vòng PV) → clamp 0 và bù phần
-  // chênh vào bậc kế trước để tổng vẫn khớp.
+  // Các bậc rơi của funnel suy từ chênh lệch giữa các cột. Nhóm
+  // "offer chưa thành hire" (Offers − Hires) không hiển thị — không kết luận
+  // được là từ chối hay đang chờ. Interviews có thể > Applications (nhiều
+  // vòng PV) → clamp 0 và bù phần chênh vào bậc kế trước.
   const raw = [
     ["onboarded", "Onboarded", t.hires],
-    ["declinedOffer", "Declined Offer", t.offers - t.hires],
     ["failedInterview", "Failed Interview", t.interviews - t.offers],
     ["failedCV", "Failed CV", t.applications - t.interviews],
     ["notApplied", "Not Applied", t.responses - t.applications],

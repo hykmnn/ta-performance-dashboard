@@ -58,18 +58,18 @@ test("filterRows by date range and recruiter", () => {
   assert.equal(filterRows(rows, {}).length, 3);
 });
 
-test("outcomeDistribution has 6 buckets summing to contacted", () => {
+test("outcomeDistribution: 5 nhóm (không có declinedOffer), tổng = contacted trừ offer đang chờ", () => {
   const t = totals(rows);
   const d = outcomeDistribution(t);
-  assert.equal(d.length, 6);
+  assert.equal(d.length, 5);
   assert.deepEqual(d.map((x) => x.key), [
-    "onboarded", "declinedOffer", "failedInterview", "failedCV", "notApplied", "noResponse",
+    "onboarded", "failedInterview", "failedCV", "notApplied", "noResponse",
   ]);
   const sum = d.reduce((s, x) => s + x.count, 0);
-  assert.equal(sum, t.contacted);
+  assert.equal(sum, t.contacted - (t.offers - t.hires)); // 48 - 5 = 43
   const onboarded = d.find((x) => x.key === "onboarded");
   assert.equal(onboarded.count, 6);
-  assert.equal(onboarded.pct, 12.5); // 6/48
+  assert.equal(onboarded.pct, 14); // 6/43
 });
 
 test("outcomeDistribution clamps negative drop-offs to 0", () => {

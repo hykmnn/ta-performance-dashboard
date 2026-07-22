@@ -17,7 +17,7 @@ const $ = (sel) => document.querySelector(sel);
 // Series colors theo Eastgate tokens: semantic cho kết quả rõ nghĩa,
 // thang xám ink cho các bậc rơi trung tính.
 const OUTCOME_COLORS = {
-  onboarded: "#1FA97D", declinedOffer: "#E24B4B", failedInterview: "#3A4252",
+  onboarded: "#1FA97D", failedInterview: "#3A4252",
   failedCV: "#6B7280", notApplied: "#94A3B8", noResponse: "#CBD5E1",
 };
 
