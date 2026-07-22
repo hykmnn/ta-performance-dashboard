@@ -2,7 +2,7 @@
 
 ## 1. Tạo repo
 
-Trong org **egs-people-operations** (nếu bạn có quyền — cùng chỗ với core-value-recognition), hoặc GitHub cá nhân:
+Tạo repo trên GitHub (org công ty hoặc tài khoản cá nhân):
 
 ```bash
 cd ~/Desktop/ta-performance-dashboard
