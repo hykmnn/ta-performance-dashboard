@@ -36,13 +36,15 @@ export async function initAuth() {
     cache: { cacheLocation: "sessionStorage" },
   });
   await msalApp.initialize();
+  const result = await msalApp.handleRedirectPromise();
+  if (result?.account) return result.account;
   return msalApp.getAllAccounts()[0] || null;
 }
 
 export async function signIn() {
   if (!msalApp) await initAuth();
-  const result = await msalApp.loginPopup({ scopes: SCOPES });
-  return result.account;
+  await msalApp.loginRedirect({ scopes: SCOPES });
+  
 }
 
 async function getToken() {
@@ -52,8 +54,8 @@ async function getToken() {
     const r = await msalApp.acquireTokenSilent({ scopes: SCOPES, account });
     return r.accessToken;
   } catch {
-    const r = await msalApp.acquireTokenPopup({ scopes: SCOPES, account });
-    return r.accessToken;
+    await msalApp.acquireTokenRedirect({ scopes: SCOPES, account });
+    return new Promise(() => {});
   }
 }
 
