@@ -24,7 +24,8 @@ function loadMsal() {
   });
 }
 
-// Khởi tạo MSAL; trả về account nếu đã đăng nhập từ trước, ngược lại null.
+// Khởi tạo MSAL (redirect flow — không dùng popup vì hay bị browser chặn);
+// trả về account nếu đã đăng nhập, ngược lại null.
 export async function initAuth() {
   await loadMsal();
   msalApp = new window.msal.PublicClientApplication({
@@ -36,15 +37,14 @@ export async function initAuth() {
     cache: { cacheLocation: "sessionStorage" },
   });
   await msalApp.initialize();
-  const result = await msalApp.handleRedirectPromise();
+  const result = await msalApp.handleRedirectPromise(); // hứng kết quả khi quay về từ trang login
   if (result?.account) return result.account;
   return msalApp.getAllAccounts()[0] || null;
 }
 
 export async function signIn() {
   if (!msalApp) await initAuth();
-  await msalApp.loginRedirect({ scopes: SCOPES });
-  
+  await msalApp.loginRedirect({ scopes: SCOPES }); // rời trang → quay lại sau khi đăng nhập
 }
 
 async function getToken() {
@@ -54,8 +54,9 @@ async function getToken() {
     const r = await msalApp.acquireTokenSilent({ scopes: SCOPES, account });
     return r.accessToken;
   } catch {
+    // Cần consent/scope mới → redirect cả trang rồi quay lại.
     await msalApp.acquireTokenRedirect({ scopes: SCOPES, account });
-    return new Promise(() => {});
+    return new Promise(() => {}); // trang sẽ rời đi — treo promise cho tới lúc đó
   }
 }
 

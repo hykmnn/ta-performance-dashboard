@@ -14,9 +14,11 @@ const cleanAchievements = (list) =>
 
 const $ = (sel) => document.querySelector(sel);
 
+// Series colors theo Eastgate tokens: semantic cho kết quả rõ nghĩa,
+// thang xám ink cho các bậc rơi trung tính.
 const OUTCOME_COLORS = {
-  onboarded: "#C8102E", declinedOffer: "#F08A9B", failedInterview: "#5A6474",
-  failedCV: "#8A94A6", notApplied: "#B7BFCC", noResponse: "#DDE2EA",
+  onboarded: "#1FA97D", declinedOffer: "#E24B4B", failedInterview: "#3A4252",
+  failedCV: "#6B7280", notApplied: "#94A3B8", noResponse: "#CBD5E1",
 };
 
 const state = {
