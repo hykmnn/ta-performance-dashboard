@@ -5,7 +5,7 @@ import { CONFIG } from "./config.js";
 
 export class PermissionError extends Error {}
 
-const MSAL_CDN = "https://alcdn.msauth.net/browser/3.28.1/js/msal-browser.min.js";
+const MSAL_CDN = "https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.30.0/lib/msal-browser.min.js";
 // Delegated SharePoint scope — đọc dưới quyền của chính người đang đăng nhập.
 const SCOPES = [`https://${CONFIG.siteHost}/AllSites.Read`];
 
@@ -38,6 +38,7 @@ export async function initAuth() {
 }
 
 export async function signIn() {
+  if (!msalApp) await initAuth();
   const result = await msalApp.loginPopup({ scopes: SCOPES });
   return result.account;
 }
