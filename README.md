@@ -2,7 +2,7 @@
 
 **Live:** https://hykmnn.github.io/ta-performance-dashboard/ (repo: https://github.com/hykmnn/ta-performance-dashboard)
 
-Dashboard hiển thị performance team Talent Acquisition — Eastgate Software. Đọc data real-time từ SharePoint (site ORG HR Admin), phong cách tương tự [core-value-recognition](https://egs-people-operations.github.io/core-value-recognition/).
+Dashboard hiển thị performance team Talent Acquisition — Eastgate Software. Đọc và ghi data real-time với SharePoint (site ORG HR Admin), giao diện theo Eastgate Design System.
 
 ## Tính năng
 
