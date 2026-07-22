@@ -2,7 +2,6 @@
 
 Để dashboard đọc được SharePoint, cần đăng ký 1 "App registration" trên Microsoft Entra của công ty. Ai làm được: người có quyền tạo app registration (thường IT admin; hoặc bất kỳ ai nếu tenant cho phép user tự đăng ký app).
 
-> Gợi ý: platform core-value-recognition của công ty đã làm bước tương tự — có thể hỏi người quản lý platform đó làm giúp trong 10 phút, hoặc dùng lại app của họ bằng cách thêm redirect URI mới (bước 3) nếu app đó đã có quyền SharePoint.
 
 ## Các bước
 
