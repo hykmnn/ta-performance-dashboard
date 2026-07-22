@@ -1,5 +1,6 @@
 import { CONFIG } from "./config.js";
 import { DEMO_FUNNEL, DEMO_ACHIEVEMENTS } from "./data-demo.js";
+import { initEntryUI } from "./entry.js";
 import {
   filterRows, totals, rates, outcomeDistribution, leaderboard, monthlyKpi,
   positionSnapshots, INTERVIEW_TARGET, RTO_TARGET,
@@ -273,6 +274,39 @@ function stepMonth(dir) {
   if (i >= 0 && i < ms.length) { state.kpiMonth = ms[i]; renderKpiBenchmark(); }
 }
 
+// API giả cho demo mode: ghi/xóa trong bộ nhớ để duyệt UI không cần SharePoint.
+function demoApi() {
+  const users = [...new Set(state.rows.map((r) => r.recruiter))]
+    .map((name, i) => ({ id: i + 1, name, email: i === 0 ? "demo" : name.toLowerCase() }));
+  return {
+    addFunnelRow: async (f) => { state.rows.push({ ...f, recruiter: "Demo User" }); },
+    addAchievement: async (f) => {
+      state.achievements.push({
+        month: f.month, kpiType: f.kpiType, title: f.title,
+        recruiter: users.find((u) => u.id === f.recruiterId)?.name || "Demo User",
+      });
+    },
+    deleteItem: async (list, id) => {
+      if (list === CONFIG.funnelList) state.rows.splice(id, 1);
+      else state.achievements.splice(id, 1);
+    },
+    getSiteUsers: async () => users,
+    getRecentEntries: async () => ({
+      funnel: state.rows.map((r, i) => ({
+        Id: i, WeekEnding: r.weekEnding, Position: r.position,
+        CandidatesContacted: r.contacted, CandidatesResponses: r.responses,
+        Applications: r.applications, Interviews: r.interviews, Offers: r.offers,
+        Hires: r.hires, Notes: r.notes || "", Author: { Title: r.recruiter },
+        Created: r.weekEnding,
+      })).reverse().slice(0, 100),
+      kpi: state.achievements.map((a, i) => ({
+        Id: i, KPIMonth: a.month + "-01", KPIType: a.kpiType, Title: a.title || "",
+        Recruiter: { Title: a.recruiter }, Author: { Title: a.recruiter }, Created: a.month + "-01",
+      })),
+    }),
+  };
+}
+
 async function boot() {
   if (CONFIG.isDemo()) {
     $("#demo-banner").hidden = false;
@@ -282,13 +316,16 @@ async function boot() {
     fillRecruiterFilter();
     bindEvents(() => renderAll());
     renderAll();
+    initEntryUI({ isDemo: true, account: { name: "Demo User", username: "demo" }, api: demoApi(), reload: async () => { fillRecruiterFilter(); renderAll(); } });
     return;
   }
 
-  // Live mode — MSAL + Graph (js/graph.js)
-  const { initAuth, signIn, getData, PermissionError } = await import("./graph.js");
+  // Live mode — MSAL + SharePoint REST (js/graph.js)
+  const graph = await import("./graph.js");
+  const { initAuth, signIn, getData, PermissionError } = graph;
   const landing = $("#landing");
   landing.hidden = false;
+  let entryReady = false;
 
   const loadDashboard = async () => {
     try {
@@ -299,6 +336,15 @@ async function boot() {
       $("#dashboard").hidden = false;
       fillRecruiterFilter();
       renderAll();
+      if (!entryReady) {
+        entryReady = true;
+        initEntryUI({
+          isDemo: false,
+          account: graph.currentAccount(),
+          api: graph,
+          reload: loadDashboard,
+        });
+      }
     } catch (err) {
       const msg = err instanceof PermissionError
         ? "Your account does not have access to the ORG HR Admin site. Please contact HR."

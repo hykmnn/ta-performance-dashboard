@@ -85,6 +85,26 @@ export function leaderboard(rows) {
     .sort((a, b) => b.offers - a.offers || b.intake - a.intake);
 }
 
+// Validate 1 dòng nhập funnel. Trả về null nếu hợp lệ, ngược lại là thông
+// báo lỗi tiếng Việt. Interviews KHÔNG ràng với Applications (nhiều vòng PV).
+export function validateFunnelEntry(v) {
+  const fields = [
+    ["contacted", "Contacted"], ["responses", "Responses"], ["applications", "Applications"],
+    ["interviews", "Interviews"], ["offers", "Offers"], ["hires", "Hires"],
+  ];
+  for (const [key, label] of fields) {
+    const n = v[key];
+    if (typeof n !== "number" || Number.isNaN(n)) return `${label}: cần nhập số.`;
+    if (n < 0) return `${label}: phải >= 0.`;
+    if (!Number.isInteger(n)) return `${label}: phải là số nguyên.`;
+  }
+  if (v.responses > v.contacted) return "Responses không thể lớn hơn Contacted.";
+  if (v.applications > v.responses) return "Applications không thể lớn hơn Responses.";
+  if (v.offers > v.interviews) return "Offers không thể lớn hơn Interviews.";
+  if (v.hires > v.offers) return "Hires không thể lớn hơn Offers.";
+  return null;
+}
+
 // Snapshot mới nhất của từng vị trí đang tuyển: gộp mọi recruiter ở tuần
 // gần nhất mà vị trí đó có data. status: filled (có hire) / ontrack
 // (interviews >= target) / red. stale = tuần đó cũ hơn tuần mới nhất toàn hệ.

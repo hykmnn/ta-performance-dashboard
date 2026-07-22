@@ -175,3 +175,19 @@ test("positionSnapshots: sort red (gap lớn nhất trước) → ontrack → fi
 test("positionSnapshots: rỗng → mảng rỗng", () => {
   assert.deepEqual(positionSnapshots([], { interviewTarget: 5 }), []);
 });
+
+// ---- validateFunnelEntry ----
+import { validateFunnelEntry } from "../js/metrics.js";
+
+test("validateFunnelEntry: hợp lệ → null", () => {
+  assert.equal(validateFunnelEntry({ contacted: 10, responses: 8, applications: 5, interviews: 7, offers: 2, hires: 1 }), null);
+});
+
+test("validateFunnelEntry: bắt lỗi thứ tự funnel và số âm/lẻ", () => {
+  assert.match(validateFunnelEntry({ contacted: 5, responses: 8, applications: 5, interviews: 1, offers: 0, hires: 0 }), /Responses/);
+  assert.match(validateFunnelEntry({ contacted: 10, responses: 8, applications: 9, interviews: 1, offers: 0, hires: 0 }), /Applications/);
+  assert.match(validateFunnelEntry({ contacted: 10, responses: 8, applications: 5, interviews: 2, offers: 3, hires: 0 }), /Offers/);
+  assert.match(validateFunnelEntry({ contacted: 10, responses: 8, applications: 5, interviews: 2, offers: 2, hires: 3 }), /Hires/);
+  assert.match(validateFunnelEntry({ contacted: -1, responses: 0, applications: 0, interviews: 0, offers: 0, hires: 0 }), />= 0/);
+  assert.match(validateFunnelEntry({ contacted: 1.5, responses: 0, applications: 0, interviews: 0, offers: 0, hires: 0 }), /nguyên/);
+});

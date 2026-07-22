@@ -6,8 +6,10 @@ import { CONFIG } from "./config.js";
 export class PermissionError extends Error {}
 
 const MSAL_CDN = "https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.30.0/lib/msal-browser.min.js";
-// Delegated SharePoint scope — đọc dưới quyền của chính người đang đăng nhập.
-const SCOPES = [`https://${CONFIG.siteHost}/AllSites.Read`];
+// Delegated SharePoint scope — thao tác dưới quyền của chính người đăng nhập.
+// AllSites.Write bao trùm Read (scope SharePoint có thứ bậc), cho phép form
+// trên platform ghi thẳng vào list.
+const SCOPES = [`https://${CONFIG.siteHost}/AllSites.Write`];
 
 let msalApp = null;
 
@@ -102,6 +104,95 @@ function mapAchievements(items) {
     kpiType: it.KPIType || "",
     title: it.Title || "",
   })).filter((a) => a.month && a.kpiType);
+}
+
+export function currentAccount() {
+  const a = msalApp?.getAllAccounts()[0];
+  return a ? { name: a.name || a.username, username: (a.username || "").toLowerCase() } : null;
+}
+
+const siteUrl = () => `https://${CONFIG.siteHost}${CONFIG.sitePath}`;
+
+// Ghi/xóa qua REST + Bearer token: không cần X-RequestDigest.
+async function spWrite(url, { method = "POST", body, headers = {} } = {}) {
+  const token = await getToken();
+  const res = await fetch(url, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json;odata=nometadata",
+      "Content-Type": "application/json;odata=nometadata",
+      ...headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 403 || res.status === 401) throw new PermissionError(`${res.status} from SharePoint`);
+  if (!res.ok) {
+    let msg = `SharePoint ${res.status}`;
+    try { msg = (await res.json())["odata.error"]?.message?.value || msg; } catch {}
+    throw new Error(msg);
+  }
+  return res.status === 204 ? null : res.json().catch(() => null);
+}
+
+// fields ví dụ: {WeekEnding: "2026-07-19", Position: "Java", CandidatesContacted: 5, ...}
+// Date gửi dạng noon UTC để không lệch ngày (site timezone Pacific).
+export function addFunnelRow(f) {
+  return spWrite(`${siteUrl()}/_api/web/lists/getbytitle('${encodeURIComponent(CONFIG.funnelList)}')/items`, {
+    body: {
+      WeekEnding: `${f.weekEnding}T12:00:00Z`,
+      Position: f.position,
+      CandidatesContacted: f.contacted,
+      CandidatesResponses: f.responses,
+      Applications: f.applications,
+      Interviews: f.interviews,
+      Offers: f.offers,
+      Hires: f.hires,
+      Notes: f.notes || "",
+    },
+  });
+}
+
+export function addAchievement(f) {
+  return spWrite(`${siteUrl()}/_api/web/lists/getbytitle('${encodeURIComponent(CONFIG.kpiList)}')/items`, {
+    body: {
+      Title: f.title || "",
+      KPIMonth: `${f.month}-01T12:00:00Z`,
+      RecruiterId: f.recruiterId,
+      KPIType: f.kpiType,
+    },
+  });
+}
+
+export function deleteItem(listTitle, id) {
+  return spWrite(`${siteUrl()}/_api/web/lists/getbytitle('${encodeURIComponent(listTitle)}')/items(${id})`, {
+    headers: { "X-HTTP-Method": "DELETE", "IF-MATCH": "*" },
+  });
+}
+
+// Người dùng thật của site (cho dropdown Recruiter).
+export async function getSiteUsers() {
+  const token = await getToken();
+  const data = await spGet(
+    `${siteUrl()}/_api/web/siteusers?$select=Id,Title,Email,PrincipalType&$filter=PrincipalType eq 1`, token);
+  return data.value
+    .filter((u) => u.Email)
+    .map((u) => ({ id: u.Id, name: u.Title, email: u.Email.toLowerCase() }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Entries gần nhất của cả 2 list (cho màn Admin).
+export async function getRecentEntries() {
+  const token = await getToken();
+  const q = (list, select, expand) =>
+    spGet(`${siteUrl()}/_api/web/lists/getbytitle('${encodeURIComponent(list)}')/items` +
+      `?$select=Id,Created,Author/Title,${select}&$expand=Author${expand ? "," + expand : ""}` +
+      `&$orderby=Created desc&$top=100`, token);
+  const [funnel, kpi] = await Promise.all([
+    q(CONFIG.funnelList, "WeekEnding,Position,CandidatesContacted,CandidatesResponses,Applications,Interviews,Offers,Hires,Notes"),
+    q(CONFIG.kpiList, "Title,KPIMonth,KPIType,Recruiter/Title", "Recruiter").catch(() => ({ value: [] })),
+  ]);
+  return { funnel: funnel.value, kpi: kpi.value };
 }
 
 export async function getData() {

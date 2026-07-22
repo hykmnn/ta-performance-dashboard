@@ -52,8 +52,13 @@
         <option value="">All Recruiters</option>
       </select>
       <button id="btn-refresh" class="btn-icon" title="Refresh data">⟳</button>
+      <button id="btn-log-weekly" class="btn-primary" hidden>＋ Log Weekly</button>
+      <button id="btn-log-kpi" class="btn-primary outline" hidden>＋ Log KPI</button>
+      <button id="btn-admin" class="btn-primary dark" hidden>Admin</button>
     </div>
   </header>
+
+  <section class="card" id="admin-section" hidden></section>
 
   <section class="kpi-cards" id="kpi-cards"></section>
 
@@ -115,6 +120,9 @@
     Recruiter attribution = row author. Outcome distribution is estimated from funnel drop-offs.
   </footer>
 </main>
+
+<div id="modal-root"></div>
+<div id="toast" class="toast" hidden></div>
 
 <script type="module" src="js/app.js"></script>
 </body>

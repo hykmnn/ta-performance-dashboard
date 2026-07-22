@@ -14,7 +14,7 @@
    - Bấm **Register**.
 3. Vào **Authentication → Single-page application → Add URI** và thêm URL thật của site:
    `https://hykmnn.github.io/ta-performance-dashboard/`
-4. **API permissions → Add a permission → SharePoint → Delegated permissions** → tick **AllSites.Read** → **Add permissions**.
+4. **API permissions → Add a permission → SharePoint → Delegated permissions** → tick **AllSites.Read** VÀ **AllSites.Write** (Write cần cho tính năng Log data trên platform) → **Add permissions**.
 5. Nếu cột Status hiện "Not granted": bấm **Grant admin consent for Eastgate Software** (cần IT admin bấm — chỉ 1 lần). Nếu tenant cho phép user consent thì bỏ qua, người dùng đầu tiên đăng nhập sẽ tự bấm Accept.
 6. Vào **Overview**, copy 2 giá trị:
    - **Application (client) ID**

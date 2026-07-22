@@ -12,6 +12,11 @@ export const CONFIG = {
   excludeRecruiters: ["Hong Bui"],
   // Target phỏng vấn mỗi tuần cho 1 vị trí đang tuyển (section Open Positions).
   interviewWeeklyTarget: 5,
+  // Email được thấy màn Admin (xem/xóa mọi entry).
+  admins: ["hong.bui@eastgate-software.com"],
+  // 14 vị trí — khớp choice của cột Position trong list.
+  positions: ["Java", "Frontend Web", "Backend Web", "AI", "DevOps", "BA", "QA",
+    "PM", "UI/UX", "GET", "KAM", "MKT", "HR", "Comtor"],
   isDemo() {
     return this.clientId === "YOUR_CLIENT_ID";
   },
