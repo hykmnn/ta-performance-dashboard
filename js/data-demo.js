@@ -42,6 +42,15 @@ for (let w = WEEKS - 1; w >= 0; w--) {
   }
 }
 
+// Ghi chú mẫu cho tuần mới nhất (hiện ở section Open Positions)
+const DEMO_NOTES = { "Java": "Ready to offer 2 bạn M1.", "DevOps": "Pending 2 PV + 2 offer.", "QA": "Tuần sau phỏng vấn." };
+for (const r of DEMO_FUNNEL) {
+  if (r.weekEnding === LAST_SUNDAY && DEMO_NOTES[r.position]) {
+    r.notes = DEMO_NOTES[r.position];
+    delete DEMO_NOTES[r.position];
+  }
+}
+
 export const DEMO_ACHIEVEMENTS = [
   { month: "2026-07", recruiter: "AnhTD", kpiType: "IT S1/S2 pass probation", title: "Senior Java Dev" },
   { month: "2026-07", recruiter: "MyLTP", kpiType: "Time-to-fill ≤ 30 days", title: "QA Engineer" },

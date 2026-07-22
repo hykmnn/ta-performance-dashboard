@@ -7,6 +7,11 @@ export const CONFIG = {
   sitePath: "/sites/ORGHRAdmin",
   funnelList: "Recruitment Funnel Weekly",
   kpiList: "TA KPI Achievements",
+  // Dòng data của những người này bị loại khỏi mọi thống kê (data test,
+  // không phải nhân sự TA).
+  excludeRecruiters: ["Hong Bui"],
+  // Target phỏng vấn mỗi tuần cho 1 vị trí đang tuyển (section Open Positions).
+  interviewWeeklyTarget: 5,
   isDemo() {
     return this.clientId === "YOUR_CLIENT_ID";
   },

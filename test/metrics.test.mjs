@@ -131,3 +131,47 @@ test("KPI_BONUS has all 7 types with correct amounts", () => {
   assert.equal(INTERVIEW_TARGET, 40);
   assert.equal(RTO_TARGET, 8);
 });
+
+// ---- positionSnapshots ----
+import { positionSnapshots } from "../js/metrics.js";
+
+const posRows = [
+  // Java: 2 recruiter cùng tuần mới nhất → cộng dồn; tuần cũ bị bỏ
+  { weekEnding: "2026-07-12", position: "Java", recruiter: "A", contacted: 50, responses: 10, applications: 2, interviews: 1, offers: 0, hires: 0, notes: "note cũ" },
+  { weekEnding: "2026-07-19", position: "Java", recruiter: "A", contacted: 60, responses: 13, applications: 2, interviews: 1, offers: 0, hires: 0, notes: "Ready to offer" },
+  { weekEnding: "2026-07-19", position: "Java", recruiter: "B", contacted: 40, responses: 10, applications: 2, interviews: 1, offers: 0, hires: 0, notes: "" },
+  // DevOps: chỉ có tuần cũ → stale, đạt target
+  { weekEnding: "2026-07-05", position: "DevOps", recruiter: "A", contacted: 45, responses: 28, applications: 7, interviews: 6, offers: 2, hires: 0, notes: "Pending offer" },
+  // AI: có hire → filled
+  { weekEnding: "2026-07-19", position: "AI", recruiter: "B", contacted: 5, responses: 3, applications: 2, interviews: 2, offers: 1, hires: 1, notes: "Offer accepted" },
+];
+
+test("positionSnapshots: gộp theo vị trí ở tuần mới nhất của vị trí đó", () => {
+  const snaps = positionSnapshots(posRows, { interviewTarget: 5 });
+  const java = snaps.find((s) => s.position === "Java");
+  assert.equal(java.weekEnding, "2026-07-19");
+  assert.equal(java.contacted, 100);
+  assert.equal(java.interviews, 2);
+  assert.equal(java.status, "red");
+  assert.equal(java.gap, 3);           // 5 - 2
+  assert.equal(java.stale, false);
+  assert.equal(java.notes, "Ready to offer");
+});
+
+test("positionSnapshots: status ontrack/filled + stale khi tuần cũ hơn max", () => {
+  const snaps = positionSnapshots(posRows, { interviewTarget: 5 });
+  const devops = snaps.find((s) => s.position === "DevOps");
+  assert.equal(devops.status, "ontrack"); // 6 >= 5
+  assert.equal(devops.stale, true);       // 05/07 < 19/07
+  const ai = snaps.find((s) => s.position === "AI");
+  assert.equal(ai.status, "filled");
+});
+
+test("positionSnapshots: sort red (gap lớn nhất trước) → ontrack → filled", () => {
+  const snaps = positionSnapshots(posRows, { interviewTarget: 5 });
+  assert.deepEqual(snaps.map((s) => s.status), ["red", "ontrack", "filled"]);
+});
+
+test("positionSnapshots: rỗng → mảng rỗng", () => {
+  assert.deepEqual(positionSnapshots([], { interviewTarget: 5 }), []);
+});

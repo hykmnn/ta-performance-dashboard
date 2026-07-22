@@ -12,8 +12,8 @@
    - **Supported account types:** *Accounts in this organizational directory only (Eastgate Software only - Single tenant)*
    - **Redirect URI:** chọn platform **Single-page application (SPA)**, URI: `http://localhost:8763` (để test local)
    - Bấm **Register**.
-3. Sau khi deploy GitHub Pages (xem DEPLOY.md), quay lại **Authentication → Single-page application → Add URI** và thêm URL thật, ví dụ:
-   `https://egs-people-operations.github.io/ta-performance-dashboard/`
+3. Vào **Authentication → Single-page application → Add URI** và thêm URL thật của site:
+   `https://hykmnn.github.io/ta-performance-dashboard/`
 4. **API permissions → Add a permission → SharePoint → Delegated permissions** → tick **AllSites.Read** → **Add permissions**.
 5. Nếu cột Status hiện "Not granted": bấm **Grant admin consent for Eastgate Software** (cần IT admin bấm — chỉ 1 lần). Nếu tenant cho phép user consent thì bỏ qua, người dùng đầu tiên đăng nhập sẽ tự bấm Accept.
 6. Vào **Overview**, copy 2 giá trị:

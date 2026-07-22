@@ -85,6 +85,32 @@ export function leaderboard(rows) {
     .sort((a, b) => b.offers - a.offers || b.intake - a.intake);
 }
 
+// Snapshot mới nhất của từng vị trí đang tuyển: gộp mọi recruiter ở tuần
+// gần nhất mà vị trí đó có data. status: filled (có hire) / ontrack
+// (interviews >= target) / red. stale = tuần đó cũ hơn tuần mới nhất toàn hệ.
+export function positionSnapshots(rows, { interviewTarget = 5 } = {}) {
+  if (!rows.length) return [];
+  const maxWeek = rows.reduce((m, r) => (r.weekEnding > m ? r.weekEnding : m), "");
+  const byPos = new Map();
+  for (const r of rows) {
+    const g = byPos.get(r.position);
+    if (!g || r.weekEnding > g.week) byPos.set(r.position, { week: r.weekEnding, rows: [r] });
+    else if (r.weekEnding === g.week) g.rows.push(r);
+  }
+  const order = { red: 0, ontrack: 1, filled: 2 };
+  return [...byPos.entries()].map(([position, { week, rows: pr }]) => {
+    const t = totals(pr);
+    const notes = pr.map((r) => (r.notes || "").trim()).filter(Boolean).join(" · ");
+    const status = t.hires > 0 ? "filled" : t.interviews >= interviewTarget ? "ontrack" : "red";
+    return {
+      position, weekEnding: week, ...t, notes, status,
+      gap: status === "red" ? interviewTarget - t.interviews : 0,
+      stale: week < maxWeek,
+      rates: rates(t),
+    };
+  }).sort((a, b) => order[a.status] - order[b.status] || b.gap - a.gap);
+}
+
 export function monthlyKpi(rows, achievements, month) {
   const mRows = rows.filter((r) => r.weekEnding.startsWith(month));
   const mAch = achievements.filter((a) => a.month === month);

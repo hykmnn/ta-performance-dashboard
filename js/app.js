@@ -2,8 +2,14 @@ import { CONFIG } from "./config.js";
 import { DEMO_FUNNEL, DEMO_ACHIEVEMENTS } from "./data-demo.js";
 import {
   filterRows, totals, rates, outcomeDistribution, leaderboard, monthlyKpi,
-  INTERVIEW_TARGET, RTO_TARGET,
+  positionSnapshots, INTERVIEW_TARGET, RTO_TARGET,
 } from "./metrics.js";
+
+// Loại data test / người ngoài team TA khỏi mọi thống kê.
+const cleanRows = (rows) =>
+  rows.filter((r) => !(CONFIG.excludeRecruiters || []).includes(r.recruiter));
+const cleanAchievements = (list) =>
+  list.filter((a) => !(CONFIG.excludeRecruiters || []).includes(a.recruiter));
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -162,6 +168,65 @@ function renderKpiBenchmark() {
     </div>`).join("");
 }
 
+function renderPositions() {
+  const target = CONFIG.interviewWeeklyTarget || 5;
+  // Snapshot theo vị trí luôn tính trên toàn bộ data (không theo time filter)
+  // nhưng tôn trọng filter recruiter.
+  const rows = state.recruiter
+    ? state.rows.filter((r) => r.recruiter === state.recruiter)
+    : state.rows;
+  const snaps = positionSnapshots(rows, { interviewTarget: target });
+  $("#positions-sub").textContent =
+    `INTERVIEW TARGET = ${target}/WEEK · LATEST WEEK PER POSITION`;
+
+  const counts = {
+    red: snaps.filter((s) => s.status === "red").length,
+    ontrack: snaps.filter((s) => s.status === "ontrack").length,
+    filled: snaps.filter((s) => s.status === "filled").length,
+  };
+  $("#pos-stats").innerHTML = `
+    <span class="pos-chip"><b>${snaps.length}</b> positions tracked</span>
+    <span class="pos-chip red"><b>${counts.red}</b> behind target (&lt;${target} interviews)</span>
+    <span class="pos-chip green"><b>${counts.ontrack}</b> on track</span>
+    <span class="pos-chip teal"><b>${counts.filled}</b> filled</span>`;
+
+  const grid = $("#pos-grid");
+  if (!snaps.length) {
+    grid.innerHTML = `<div class="kpi-empty">No position data yet.</div>`;
+    return;
+  }
+  const badge = (s) =>
+    s.status === "filled" ? `FILLED · ${s.hires} HIRE${s.hires > 1 ? "S" : ""}`
+    : s.status === "ontrack" ? `ON TRACK · ${s.interviews}/${target}`
+    : `BEHIND · ${s.interviews}/${target} (−${s.gap})`;
+  grid.innerHTML = snaps.map((s) => {
+    const max = Math.max(s.contacted, 1);
+    const bar = (key, val, hl) => `
+      <div class="pos-row ${hl ? "hl" : ""}">
+        <span class="lbl">${key}</span>
+        <span class="pos-bar"><i class="${hl ? (s.status === "red" ? "warn" : "ok") : ""}"
+          style="width:${Math.min(100, (val / max) * 100)}%"></i></span>
+        <span class="num">${val}</span>
+      </div>`;
+    return `
+      <div class="pos-card ${s.status}">
+        <div class="pos-head"><h3>${esc(s.position)}</h3>
+          <span class="pos-badge ${s.status}">${badge(s)}</span></div>
+        <div class="pos-week">Wk ending ${fmtDate(s.weekEnding)}
+          ${s.stale ? `<span class="stale"> · ⚠ NOT UPDATED THIS WEEK</span>` : ""}</div>
+        ${bar("Contacted", s.contacted)}
+        ${bar("Responses", s.responses)}
+        ${bar("Applications", s.applications)}
+        ${bar("Interviews", s.interviews, true)}
+        ${bar("Offers", s.offers)}
+        ${bar("Hires", s.hires)}
+        <div class="pos-rates">resp ${s.rates.responseRate}% · apply ${s.rates.applicationRate}% ·
+          interview ${s.rates.interviewRate}% · offer ${s.rates.offerRate}%</div>
+        ${s.notes ? `<div class="pos-note">▸ ${esc(s.notes)}</div>` : ""}
+      </div>`;
+  }).join("");
+}
+
 function renderAll() {
   const rows = activeRows();
   const t = totals(rows);
@@ -170,6 +235,7 @@ function renderAll() {
   renderTopPerformer(lb);
   renderLeaderboard(lb);
   renderOutcomes(t);
+  renderPositions();
   renderKpiBenchmark();
   $("#time-ref").textContent = state.rows.length ? fmtDate(maxWeek()) : "—";
 }
@@ -210,8 +276,8 @@ function stepMonth(dir) {
 async function boot() {
   if (CONFIG.isDemo()) {
     $("#demo-banner").hidden = false;
-    state.rows = DEMO_FUNNEL;
-    state.achievements = DEMO_ACHIEVEMENTS;
+    state.rows = cleanRows(DEMO_FUNNEL);
+    state.achievements = cleanAchievements(DEMO_ACHIEVEMENTS);
     $("#dashboard").hidden = false;
     fillRecruiterFilter();
     bindEvents(() => renderAll());
@@ -227,8 +293,8 @@ async function boot() {
   const loadDashboard = async () => {
     try {
       const { rows, achievements } = await getData();
-      state.rows = rows;
-      state.achievements = achievements;
+      state.rows = cleanRows(rows);
+      state.achievements = cleanAchievements(achievements);
       landing.hidden = true;
       $("#dashboard").hidden = false;
       fillRecruiterFilter();

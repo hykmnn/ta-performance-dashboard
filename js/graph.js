@@ -91,6 +91,7 @@ function mapFunnel(items) {
     interviews: num(it.Interviews),
     offers: num(it.Offers),
     hires: num(it.Hires),
+    notes: it.Notes || "",
   })).filter((r) => r.weekEnding);
 }
 
@@ -107,7 +108,7 @@ export async function getData() {
   const token = await getToken();
   const [funnelItems, kpiItems] = await Promise.all([
     listItems(CONFIG.funnelList,
-      "WeekEnding,Position,CandidatesContacted,CandidatesResponses,Applications,Interviews,Offers,Hires,Author/Title",
+      "WeekEnding,Position,CandidatesContacted,CandidatesResponses,Applications,Interviews,Offers,Hires,Notes,Author/Title",
       "Author", token),
     listItems(CONFIG.kpiList, "Title,KPIMonth,KPIType,Recruiter/Title", "Recruiter", token)
       .catch((e) => {
