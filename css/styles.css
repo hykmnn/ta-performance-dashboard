@@ -228,6 +228,21 @@ main { max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; }
 .chip small { color: var(--blue-700); font-weight: 700; }
 .kpi-empty { color: var(--muted); text-align: center; padding: 20px; font-weight: 500; }
 
+/* Bảng quy tắc success-hire bonus + breakdown est. bonus */
+.kpi-legend { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 14px; }
+.kpi-legend .legend-title {
+  font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+  letter-spacing: .04em; margin-right: 4px;
+}
+.progress-label .src {
+  font-family: var(--font-mono); font-size: 9px; color: var(--blue-700);
+  letter-spacing: .04em; font-weight: 700;
+}
+.bonus-lines { margin-top: 6px; font-size: 11px; }
+.b-line { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); }
+.b-line b { color: var(--success); font-weight: 700; }
+.b-line.none { justify-content: flex-end; color: var(--ink-300); font-style: italic; }
+
 /* ---------- Open positions ---------- */
 .positions-section { margin-bottom: 18px; }
 .pos-stats { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0 16px; }
