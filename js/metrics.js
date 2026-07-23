@@ -165,26 +165,35 @@ export function validateFunnelEntry(v) {
   return null;
 }
 
-// Snapshot mới nhất của từng vị trí đang tuyển: gộp mọi recruiter ở tuần
-// gần nhất mà vị trí đó có data. status: filled (có hire) / ontrack
-// (interviews >= target) / red. stale = tuần đó cũ hơn tuần mới nhất toàn hệ.
+// Tiến độ từng vị trí đang tuyển trên tập rows được đưa vào (đã lọc theo
+// time/recruiter filter): CỘNG DỒN mọi tuần trong khoảng — đổi filter là số
+// đổi theo. Target phỏng vấn = interviewTarget × số tuần vị trí có log
+// (không phạt tuần không log — checklist "missing positions" ở Admin lo
+// việc đó). status: filled (có hire trong khoảng) / ontrack / red.
+// stale = tuần mới nhất của vị trí cũ hơn tuần mới nhất toàn hệ.
+// notes: chỉ lấy của tuần mới nhất (ghi chú cũ thường đã hết thời sự).
 export function positionSnapshots(rows, { interviewTarget = 5 } = {}) {
   if (!rows.length) return [];
   const maxWeek = rows.reduce((m, r) => (r.weekEnding > m ? r.weekEnding : m), "");
   const byPos = new Map();
   for (const r of rows) {
-    const g = byPos.get(r.position);
-    if (!g || r.weekEnding > g.week) byPos.set(r.position, { week: r.weekEnding, rows: [r] });
-    else if (r.weekEnding === g.week) g.rows.push(r);
+    const g = byPos.get(r.position) || { rows: [], weeks: new Set() };
+    g.rows.push(r);
+    g.weeks.add(r.weekEnding);
+    byPos.set(r.position, g);
   }
   const order = { red: 0, ontrack: 1, filled: 2 };
-  return [...byPos.entries()].map(([position, { week, rows: pr }]) => {
-    const t = totals(pr);
-    const notes = pr.map((r) => (r.notes || "").trim()).filter(Boolean).join(" · ");
-    const status = t.hires > 0 ? "filled" : t.interviews >= interviewTarget ? "ontrack" : "red";
+  return [...byPos.entries()].map(([position, g]) => {
+    const t = totals(g.rows);
+    const week = [...g.weeks].sort().at(-1);
+    const weeks = g.weeks.size;
+    const target = interviewTarget * weeks;
+    const notes = g.rows.filter((r) => r.weekEnding === week)
+      .map((r) => (r.notes || "").trim()).filter(Boolean).join(" · ");
+    const status = t.hires > 0 ? "filled" : t.interviews >= target ? "ontrack" : "red";
     return {
-      position, weekEnding: week, ...t, notes, status,
-      gap: status === "red" ? interviewTarget - t.interviews : 0,
+      position, weekEnding: week, weeks, target, ...t, notes, status,
+      gap: status === "red" ? target - t.interviews : 0,
       stale: week < maxWeek,
       rates: rates(t),
     };

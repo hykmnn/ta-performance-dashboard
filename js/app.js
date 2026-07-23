@@ -210,13 +210,12 @@ function renderKpiBenchmark() {
 
 function renderPositions() {
   const target = CONFIG.interviewWeeklyTarget || 5;
-  // Tôn trọng cả time filter lẫn recruiter filter — snapshot lấy tuần gần
-  // nhất của từng vị trí TRONG khoảng đang chọn (vị trí không có data trong
-  // khoảng đó sẽ không hiện).
+  // Tôn trọng cả time filter lẫn recruiter filter — số liệu mỗi vị trí là
+  // TỔNG các tuần trong khoảng đang chọn; target = 5/tuần × số tuần có log.
   const snaps = positionSnapshots(activeRows(), { interviewTarget: target });
   $("#positions-sub").textContent =
-    `INTERVIEW TARGET = ${target}/WEEK · LATEST WEEK PER POSITION` +
-    (state.range === "all" ? "" : ` · LAST ${state.range} DAYS`);
+    `INTERVIEW TARGET = ${target}/WEEK · TOTALS ` +
+    (state.range === "all" ? "ALL TIME" : `LAST ${state.range} DAYS`);
 
   const counts = {
     red: snaps.filter((s) => s.status === "red").length,
@@ -225,7 +224,7 @@ function renderPositions() {
   };
   $("#pos-stats").innerHTML = `
     <span class="pos-chip"><b>${snaps.length}</b> positions tracked</span>
-    <span class="pos-chip red"><b>${counts.red}</b> behind target (&lt;${target} interviews)</span>
+    <span class="pos-chip red"><b>${counts.red}</b> behind target (&lt;${target}/wk)</span>
     <span class="pos-chip green"><b>${counts.ontrack}</b> on track</span>
     <span class="pos-chip teal"><b>${counts.filled}</b> filled</span>`;
 
@@ -236,8 +235,8 @@ function renderPositions() {
   }
   const badge = (s) =>
     s.status === "filled" ? `FILLED · ${s.hires} HIRE${s.hires > 1 ? "S" : ""}`
-    : s.status === "ontrack" ? `ON TRACK · ${s.interviews}/${target}`
-    : `BEHIND · ${s.interviews}/${target} (−${s.gap})`;
+    : s.status === "ontrack" ? `ON TRACK · ${s.interviews}/${s.target}`
+    : `BEHIND · ${s.interviews}/${s.target} (−${s.gap})`;
   grid.innerHTML = snaps.map((s) => {
     const max = Math.max(s.contacted, 1);
     const bar = (key, val, hl) => `
@@ -251,7 +250,7 @@ function renderPositions() {
       <div class="pos-card ${s.status}">
         <div class="pos-head"><h3>${esc(s.position)}</h3>
           <span class="pos-badge ${s.status}">${badge(s)}</span></div>
-        <div class="pos-week">Wk ending ${fmtDate(s.weekEnding)}
+        <div class="pos-week">${s.weeks} wk logged · latest ${fmtDate(s.weekEnding)}
           ${s.stale ? `<span class="stale"> · ⚠ NOT UPDATED THIS WEEK</span>` : ""}</div>
         ${bar("Contacted", s.contacted)}
         ${bar("Responses", s.responses)}
