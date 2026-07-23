@@ -3,7 +3,7 @@ import { DEMO_FUNNEL, DEMO_ACHIEVEMENTS } from "./data-demo.js";
 import { initEntryUI } from "./entry.js";
 import {
   filterRows, totals, rates, outcomeDistribution, leaderboard, monthlyKpi,
-  positionSnapshots, rtoBenchmark, INTERVIEW_TARGET, RTO_TARGET,
+  positionSnapshots, rtoBenchmark, INTERVIEW_TARGET, RTO_TARGET, KPI_BONUS,
 } from "./metrics.js";
 
 // Loại data test / người ngoài team TA khỏi mọi thống kê.
@@ -26,6 +26,7 @@ const state = {
   range: "all", recruiter: "", kpiMonth: null, // "YYYY-MM"
   activeStacks: [], // Admin chọn — benchmark RTO chạy trên danh sách này
   rtoFetcher: null, // hàm lấy RTO items (demo hoặc Azure Board)
+  rtoItems: null, // cache RTO items sau lần fetch — KPI benchmark dùng lại
 };
 
 const fmtVND = (n) => n.toLocaleString("en-US") + " ₫";
@@ -134,14 +135,26 @@ function renderOutcomes(t) {
     </div>`).join("");
 }
 
-function progressCell(label, value, target, bonusHit) {
+function progressCell(label, value, target, bonusHit, srcTag) {
   const pct = Math.min(100, (value / target) * 100);
   return `
     <div class="kpi-cell">
-      <div class="progress-label"><span>${label}</span><span><b>${value}</b>/${target}</span></div>
+      <div class="progress-label"><span>${label}${srcTag ? ` <span class="src">${srcTag}</span>` : ""}</span><span><b>${value}</b>/${target}</span></div>
       <div class="progress"><i class="${value >= target ? "hit" : ""}" style="width:${pct}%"></i></div>
       <div class="met">${value >= target ? "✓ Target met — " + fmtVND(bonusHit) : "&nbsp;"}</div>
     </div>`;
+}
+
+const fmtBonusShort = (n) =>
+  n >= 1000000 ? (n / 1000000).toLocaleString("en-US") + "M" : n / 1000 + "K";
+
+// Bảng quy tắc success-hire (KPIType → bonus) — render 1 lần từ KPI_BONUS
+// để dashboard luôn khớp với engine tính.
+function renderKpiLegend() {
+  $("#kpi-legend").innerHTML =
+    `<span class="legend-title">SUCCESS HIRE BONUS</span>` +
+    Object.entries(KPI_BONUS).map(([type, bonus]) =>
+      `<span class="chip">${esc(type)} <small>+${fmtBonusShort(bonus)}</small></span>`).join("");
 }
 
 function renderKpiBenchmark() {
@@ -152,9 +165,19 @@ function renderKpiBenchmark() {
   const container = $("#kpi-rows");
   if (!state.kpiMonth) { container.innerHTML = `<div class="kpi-empty">No data yet.</div>`; return; }
 
-  let list = monthlyKpi(state.rows, state.achievements, state.kpiMonth);
+  // RTO live từ Azure Board chỉ có "hiện trạng" — áp cho tháng hiện tại;
+  // tháng quá khứ fallback về cột Offers của funnel (board không có lịch sử).
+  const nowMonth = new Date().toISOString().slice(0, 7);
+  const rtoItems = state.rtoItems && state.kpiMonth === nowMonth
+    ? state.rtoItems.filter((i) => !(CONFIG.excludeRecruiters || []).includes(i.recruiter))
+    : null;
+
+  let list = monthlyKpi(state.rows, state.achievements, state.kpiMonth, { rtoItems });
   if (state.recruiter) list = list.filter((x) => x.recruiter === state.recruiter);
   if (!list.length) { container.innerHTML = `<div class="kpi-empty">No activity for ${monthLabel(state.kpiMonth)}.</div>`; return; }
+
+  const bonusLine = (label, amount) => amount
+    ? `<div class="b-line"><span>${label}</span><b>+${fmtVND(amount)}</b></div>` : "";
 
   container.innerHTML = list.map((x) => `
     <div class="kpi-row">
@@ -163,26 +186,33 @@ function renderKpiBenchmark() {
         <span>${esc(x.recruiter)}${x.topupBonus ? `<span class="topup">★ TOP-UP +${fmtVND(x.topupBonus)}</span>` : ""}</span>
       </div>
       ${progressCell("Interviews", x.interviews, INTERVIEW_TARGET, x.interviewsBonus || 1000000)}
-      ${progressCell("Ready to Offer", x.rto, RTO_TARGET, x.rtoBonus || 1000000)}
+      ${progressCell("Ready to Offer", x.rto, RTO_TARGET, x.rtoBonus || 1000000,
+        x.rtoLive ? "AZURE BOARD" : "")}
       <div class="kpi-bonus">
         <div class="amount">${fmtVND(x.totalBonus)}</div>
         <div class="label">EST. BONUS THIS MONTH</div>
+        <div class="bonus-lines">
+          ${bonusLine(`Interviews ≥ ${INTERVIEW_TARGET}`, x.interviewsBonus)}
+          ${bonusLine(`Ready to Offer ≥ ${RTO_TARGET}`, x.rtoBonus)}
+          ${bonusLine("Top-up (đạt cả 2)", x.topupBonus)}
+          ${bonusLine(`Success hires (${x.achievements.length})`, x.achievementsBonus)}
+          ${x.totalBonus === 0 ? `<div class="b-line none">Chưa đạt mốc bonus nào</div>` : ""}
+        </div>
         ${x.achievements.length ? `<div class="chips">${x.achievements.map((a) =>
-          `<span class="chip" title="${esc(a.title || "")}">${esc(a.kpiType)} <small>+${(a.bonus / 1000000).toLocaleString("en-US")}M</small></span>`).join("")}</div>` : ""}
+          `<span class="chip" title="${esc(a.title || "")}">${esc(a.kpiType)} <small>+${fmtBonusShort(a.bonus)}</small></span>`).join("")}</div>` : ""}
       </div>
     </div>`).join("");
 }
 
 function renderPositions() {
   const target = CONFIG.interviewWeeklyTarget || 5;
-  // Snapshot theo vị trí luôn tính trên toàn bộ data (không theo time filter)
-  // nhưng tôn trọng filter recruiter.
-  const rows = state.recruiter
-    ? state.rows.filter((r) => r.recruiter === state.recruiter)
-    : state.rows;
-  const snaps = positionSnapshots(rows, { interviewTarget: target });
+  // Tôn trọng cả time filter lẫn recruiter filter — snapshot lấy tuần gần
+  // nhất của từng vị trí TRONG khoảng đang chọn (vị trí không có data trong
+  // khoảng đó sẽ không hiện).
+  const snaps = positionSnapshots(activeRows(), { interviewTarget: target });
   $("#positions-sub").textContent =
-    `INTERVIEW TARGET = ${target}/WEEK · LATEST WEEK PER POSITION`;
+    `INTERVIEW TARGET = ${target}/WEEK · LATEST WEEK PER POSITION` +
+    (state.range === "all" ? "" : ` · LAST ${state.range} DAYS`);
 
   const counts = {
     red: snaps.filter((s) => s.status === "red").length,
@@ -253,6 +283,9 @@ async function renderRtoBenchmark() {
     el.innerHTML = `${head}<div class="kpi-empty">Không tải được từ Azure Board — ${esc(e.message)}</div>`;
     return;
   }
+  // Đồng bộ cột "Ready to Offer" của KPI benchmark với đúng data board này.
+  state.rtoItems = items;
+  renderKpiBenchmark();
   const bench = rtoBenchmark(items, {
     activeStacks: state.activeStacks, aliases: CONFIG.stackAliases, min,
   });
@@ -294,6 +327,7 @@ function renderAll() {
   renderLeaderboard(lb);
   renderOutcomes(t);
   renderPositions();
+  renderKpiLegend();
   renderKpiBenchmark();
   $("#time-ref").textContent = state.rows.length ? fmtDate(maxWeek()) : "—";
 }

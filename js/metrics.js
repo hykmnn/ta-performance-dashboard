@@ -191,14 +191,29 @@ export function positionSnapshots(rows, { interviewTarget = 5 } = {}) {
   }).sort((a, b) => order[a.status] - order[b.status] || b.gap - a.gap);
 }
 
-export function monthlyKpi(rows, achievements, month) {
+// rtoItems (tùy chọn): card đang nằm ở cột Ready-to-offer trên Azure Board —
+// khi có thì RTO của recruiter = số card họ được assign (đồng bộ với section
+// "Ready to Offer vs KPI"); khi không (tháng quá khứ, board không có lịch sử)
+// fallback về cột Offers của funnel list.
+export function monthlyKpi(rows, achievements, month, { rtoItems = null } = {}) {
   const mRows = rows.filter((r) => r.weekEnding.startsWith(month));
   const mAch = achievements.filter((a) => a.month === month);
-  const recruiters = new Set([...mRows.map((r) => r.recruiter), ...mAch.map((a) => a.recruiter)]);
+  const rtoBy = new Map();
+  for (const it of rtoItems || []) {
+    if (!it.recruiter || it.recruiter === "—") continue;
+    rtoBy.set(it.recruiter, (rtoBy.get(it.recruiter) || 0) + 1);
+  }
+  const recruiters = new Set([
+    ...mRows.map((r) => r.recruiter),
+    ...mAch.map((a) => a.recruiter),
+    ...rtoBy.keys(),
+  ]);
   return [...recruiters].map((recruiter) => {
     const own = mRows.filter((r) => r.recruiter === recruiter);
     const interviews = own.reduce((s, r) => s + (r.interviews || 0), 0);
-    const rto = own.reduce((s, r) => s + (r.offers || 0), 0);
+    const rto = rtoItems
+      ? rtoBy.get(recruiter) || 0
+      : own.reduce((s, r) => s + (r.offers || 0), 0);
     const interviewsBonus = interviews >= INTERVIEW_TARGET ? INTERVIEW_BONUS : 0;
     const rtoBonus = rto >= RTO_TARGET ? RTO_BONUS : 0;
     const topupBonus = interviewsBonus && rtoBonus ? TOPUP_BONUS : 0;
@@ -206,7 +221,8 @@ export function monthlyKpi(rows, achievements, month) {
       .map((a) => ({ ...a, bonus: KPI_BONUS[a.kpiType] || 0 }));
     const achievementsBonus = ach.reduce((s, a) => s + a.bonus, 0);
     return {
-      recruiter, interviews, rto, interviewsBonus, rtoBonus, topupBonus,
+      recruiter, interviews, rto, rtoLive: !!rtoItems,
+      interviewsBonus, rtoBonus, topupBonus,
       achievements: ach, achievementsBonus,
       totalBonus: interviewsBonus + rtoBonus + topupBonus + achievementsBonus,
     };
