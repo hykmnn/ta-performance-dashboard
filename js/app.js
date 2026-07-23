@@ -259,14 +259,18 @@ async function renderRtoBenchmark() {
   const totalRto = bench.reduce((s, b) => s + b.rto, 0);
   const withTarget = bench.filter((b) => !b.noTarget);
   const behind = withTarget.filter((b) => b.gap > 0).length;
+  const ok = withTarget.length - behind;
+  // Cùng ngôn ngữ thiết kế với section Open Positions: hàng chips + lưới card.
   el.innerHTML = `${head}
-    <div class="op-summary"><b>${totalRto}</b> candidates ready to offer ·
-      <b class="${behind ? "warn" : "ok"}">${behind}</b>/${withTarget.length} active stacks dưới target</div>
-    <div class="op-list">
+    <div class="pos-stats">
+      <span class="pos-chip"><b>${totalRto}</b> candidates ready to offer</span>
+      <span class="pos-chip red"><b>${behind}</b>/${withTarget.length} stacks dưới target</span>
+      <span class="pos-chip green"><b>${ok}</b> đạt target</span>
+    </div>
+    <div class="rto-grid">
       ${bench.map((b) => `
-        <div class="rto-row">
-          <div class="rto-head">
-            <span class="rto-stack">${esc(b.stack)}</span>
+        <div class="pos-card ${b.noTarget ? "filled" : (b.gap ? "red" : "ontrack")}">
+          <div class="pos-head"><h3>${esc(b.stack)}</h3>
             ${b.noTarget
               ? `<span class="pos-badge filled">${b.rto} · NGOÀI DANH SÁCH</span>`
               : `<span class="pos-badge ${b.gap ? "red" : "ontrack"}">
@@ -276,7 +280,7 @@ async function renderRtoBenchmark() {
             style="width:${Math.min(100, (b.rto / min) * 100)}%"></i></div>`}
           ${b.candidates.length ? `<div class="rto-names">${b.candidates.map((c) =>
             `<a href="${esc(c.url)}" target="_blank" rel="noopener" title="${esc(c.title)}">${esc(c.name)}</a> <small>(${esc(c.recruiter)})</small>`
-          ).join(" · ")}</div>` : ""}
+          ).join("<br>")}</div>` : `<div class="rto-names rto-empty">Chưa có ứng viên chờ offer</div>`}
         </div>`).join("")}
     </div>`;
 }
