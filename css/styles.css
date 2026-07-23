@@ -162,6 +162,20 @@ main { max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; }
 .tp-stats .label { font-size: 10px; font-weight: 500; letter-spacing: .04em; opacity: .85; }
 .tp-stats .num { font-size: 30px; font-weight: 800; }
 
+/* Ready to Offer vs KPI (Azure Board) */
+.op-summary { font-size: 12.5px; color: var(--muted); margin: 10px 0 4px; }
+.op-summary b { color: var(--ink); font-weight: 800; }
+.op-summary b.warn { color: var(--error); }
+.op-summary b.ok { color: var(--success); }
+.op-list { margin-top: 6px; }
+.rto-row { padding: 10px 0; border-top: 1px dashed var(--line); }
+.rto-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.rto-stack { font-weight: 700; font-size: 13.5px; }
+.rto-names { margin-top: 7px; font-size: 11.5px; color: var(--muted); line-height: 1.6; }
+.rto-names a { color: var(--blue-700); font-weight: 600; text-decoration: none; }
+.rto-names a:hover { text-decoration: underline; }
+.rto-names small { color: var(--ink-300); }
+
 /* Outcome */
 .outcome-row { margin: 12px 0; }
 .outcome-top { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px; }
@@ -311,6 +325,13 @@ main { max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; }
 .toast.err { background: var(--error); }
 
 #admin-section { margin-bottom: 18px; }
+.stack-picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 14px; }
+.stack-chip {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line);
+  border-radius: var(--pill); padding: 6px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.stack-chip:has(input:checked) { border-color: var(--blue); background: var(--blue-100); color: var(--blue-700); }
+.stack-chip input { accent-color: var(--blue); }
 .admin-h3 { font-size: 13.5px; font-weight: 700; margin: 16px 0 4px; }
 .admin-scroll { overflow-x: auto; }
 .admin-table { font-size: 12.5px; }
