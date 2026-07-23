@@ -191,3 +191,65 @@ test("validateFunnelEntry: bắt lỗi thứ tự funnel và số âm/lẻ", () 
   assert.match(validateFunnelEntry({ contacted: -1, responses: 0, applications: 0, interviews: 0, offers: 0, hires: 0 }), />= 0/);
   assert.match(validateFunnelEntry({ contacted: 1.5, responses: 0, applications: 0, interviews: 0, offers: 0, hires: 0 }), /nguyên/);
 });
+
+// ---- stackFromTitle + rtoBenchmark (Azure Board) ----
+import { stackFromTitle, rtoBenchmark, positionForTitle } from "../js/metrics.js";
+
+test("stackFromTitle: parse tech stack từ title thật trên board", () => {
+  const cases = [
+    ["M1 BA (EN 6.0) / TO - Nguyen Phan Vu - Interview date: 14/7/2026", "BA"],
+    ["M2/S1 Java (EN 6.0)  / TO", "Java"],
+    ["M1/M2 BA (EN 6.0) / TO", "BA"],
+    ["S1/S2 C#/Java TL (EN 6.0) / TO", "C#/Java TL"],
+    ["M1 DevOps (EN 7.0) / SU - Nguyen Trinh Vu - Interview: 9/7", "DevOps"],
+    ["M1 Comtor (JP N1) / SU", "Comtor"],
+    ["M1+ BE Web (EN 7.0) / Đào Thành Lộc Interview date: 04/08", "BE Web"],
+    ["S1 GET BDM (Ger) / TO", "GET BDM"],
+    ["FTE J2 AI (EN 5.0) / TO - Tran Minh Hiep - OB: 28/7/26", "AI"],
+    ["VB Growth Assistant (EN 6.0) / BD", "VB Growth Assistant"],
+    ["M1 Java (EN Toeic 770) / SU - Ngo Duc Nam", "Java"],
+  ];
+  for (const [title, expected] of cases) {
+    assert.equal(stackFromTitle(title), expected, title);
+  }
+});
+
+test("positionForTitle: match title vào position qua tên + alias, ưu tiên token dài", () => {
+  const aliases = { "Backend Web": ["BE Web", "BE"], "Frontend Web": ["FE Web", "FE", "Frontend"] };
+  const positions = ["Java", "Backend Web", "Frontend Web", "BA", "AI", "DevOps", "GET", "QA"];
+  const cases = [
+    ["M1 Java (EN 6.0) / SU - A", "Java"],
+    ["S1/S2 C#/Java TL (EN 6.0) / TO", "Java"],
+    ["M1+ BE Web (EN 7.0) / X", "Backend Web"],
+    ["M1/M2 Frontend (EN 5.0) / PF", "Frontend Web"],
+    ["FTE J2 AI (EN 5.0) / TO - B", "AI"],
+    ["M1 BA (EN 6.0) / TO - C", "BA"],
+    ["S1 GET BDM (Ger) / TO", "GET"],
+    ["M2 DevOps (EN 5.0) / SU", "DevOps"],
+    ["VB Growth Assistant (EN 6.0) / BD", null], // không khớp position nào
+  ];
+  for (const [title, expected] of cases) {
+    assert.equal(positionForTitle(title, positions, aliases), expected, title);
+  }
+});
+
+test("rtoBenchmark: mọi active stack đều có hàng (kể cả 0 RTO), unmatched vào Khác", () => {
+  const rtoItems = [
+    { title: "M1 Java (EN 6.0) / SU - A", recruiter: "Thuy" },
+    { title: "S1/S2 C#/Java TL / TO - B", recruiter: "Thu" },
+    { title: "M1 BA (EN 6.0) / TO - C", recruiter: "Trang" },
+    { title: "VB Growth Assistant / BD - D", recruiter: "An" },
+  ];
+  const b = rtoBenchmark(rtoItems, { activeStacks: ["Java", "BA", "DevOps"], aliases: {}, min: 4 });
+  assert.deepEqual(b.map((x) => [x.stack, x.rto, x.gap]), [
+    ["DevOps", 0, 4],   // 0 RTO vẫn hiện, thiếu nhiều nhất trước
+    ["BA", 1, 3],
+    ["Java", 2, 2],
+    ["Khác", 1, 0],     // unmatched, không có target, xếp cuối
+  ]);
+  assert.equal(b[3].noTarget, true);
+});
+
+test("rtoBenchmark: activeStacks rỗng → mảng rỗng (UI hiện hướng dẫn)", () => {
+  assert.deepEqual(rtoBenchmark([{ title: "M1 Java / TO - A" }], { activeStacks: [], aliases: {}, min: 4 }), []);
+});
