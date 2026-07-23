@@ -124,6 +124,30 @@ test("monthlyKpi: tháng không có data → mảng rỗng", () => {
   assert.deepEqual(monthlyKpi(rows, achievements, "2025-01"), []);
 });
 
+test("monthlyKpi + rtoItems: RTO đếm theo board, không theo funnel Offers", () => {
+  const items = [
+    { title: "M1 Java / SU - A", recruiter: "AnhTD" },
+    { title: "M1 Java / SU - B", recruiter: "AnhTD" },
+    { title: "M1 BA / TO - C", recruiter: "MyLTP" },
+    { title: "M1 QA / TO - D" }, // không có recruiter → bỏ qua
+  ];
+  const kpi = monthlyKpi(rows, achievements, "2026-06", { rtoItems: items });
+  const anh = kpi.find((x) => x.recruiter === "AnhTD");
+  assert.equal(anh.rto, 2); // từ board, không phải 9 offers của funnel
+  assert.equal(anh.rtoLive, true);
+  assert.equal(anh.rtoBonus, 0); // 2 < 8
+  assert.equal(anh.topupBonus, 0); // mất top-up vì RTO chưa đạt
+});
+
+test("monthlyKpi + rtoItems: recruiter chỉ có trên board vẫn có hàng", () => {
+  const items = [{ title: "M1 DevOps / SU - X", recruiter: "NewGuy" }];
+  const kpi = monthlyKpi(rows, achievements, "2026-06", { rtoItems: items });
+  const ng = kpi.find((x) => x.recruiter === "NewGuy");
+  assert.ok(ng);
+  assert.equal(ng.rto, 1);
+  assert.equal(ng.interviews, 0);
+});
+
 test("KPI_BONUS has all 7 types with correct amounts", () => {
   assert.equal(Object.keys(KPI_BONUS).length, 7);
   assert.equal(KPI_BONUS["TL S1/S2 pass probation"], 5000000);
