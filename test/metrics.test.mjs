@@ -160,32 +160,43 @@ test("KPI_BONUS has all 7 types with correct amounts", () => {
 import { positionSnapshots } from "../js/metrics.js";
 
 const posRows = [
-  // Java: 2 recruiter cùng tuần mới nhất → cộng dồn; tuần cũ bị bỏ
+  // Java: 2 tuần, 2 recruiter → cộng dồn TẤT CẢ; target = 5 × 2 tuần
   { weekEnding: "2026-07-12", position: "Java", recruiter: "A", contacted: 50, responses: 10, applications: 2, interviews: 1, offers: 0, hires: 0, notes: "note cũ" },
   { weekEnding: "2026-07-19", position: "Java", recruiter: "A", contacted: 60, responses: 13, applications: 2, interviews: 1, offers: 0, hires: 0, notes: "Ready to offer" },
   { weekEnding: "2026-07-19", position: "Java", recruiter: "B", contacted: 40, responses: 10, applications: 2, interviews: 1, offers: 0, hires: 0, notes: "" },
-  // DevOps: chỉ có tuần cũ → stale, đạt target
+  // DevOps: chỉ có tuần cũ → stale, đạt target (6 >= 5×1)
   { weekEnding: "2026-07-05", position: "DevOps", recruiter: "A", contacted: 45, responses: 28, applications: 7, interviews: 6, offers: 2, hires: 0, notes: "Pending offer" },
   // AI: có hire → filled
   { weekEnding: "2026-07-19", position: "AI", recruiter: "B", contacted: 5, responses: 3, applications: 2, interviews: 2, offers: 1, hires: 1, notes: "Offer accepted" },
 ];
 
-test("positionSnapshots: gộp theo vị trí ở tuần mới nhất của vị trí đó", () => {
+test("positionSnapshots: cộng dồn mọi tuần trong khoảng, target × số tuần", () => {
   const snaps = positionSnapshots(posRows, { interviewTarget: 5 });
   const java = snaps.find((s) => s.position === "Java");
-  assert.equal(java.weekEnding, "2026-07-19");
-  assert.equal(java.contacted, 100);
-  assert.equal(java.interviews, 2);
+  assert.equal(java.weekEnding, "2026-07-19"); // tuần mới nhất
+  assert.equal(java.weeks, 2);
+  assert.equal(java.contacted, 150);   // 50 + 60 + 40
+  assert.equal(java.interviews, 3);    // 1 + 1 + 1
+  assert.equal(java.target, 10);       // 5 × 2 tuần
   assert.equal(java.status, "red");
-  assert.equal(java.gap, 3);           // 5 - 2
+  assert.equal(java.gap, 7);           // 10 - 3
   assert.equal(java.stale, false);
-  assert.equal(java.notes, "Ready to offer");
+  assert.equal(java.notes, "Ready to offer"); // chỉ notes tuần mới nhất
+});
+
+test("positionSnapshots: lọc bớt tuần thì số cộng dồn thay đổi theo", () => {
+  const recent = posRows.filter((r) => r.weekEnding >= "2026-07-19");
+  const java = positionSnapshots(recent, { interviewTarget: 5 })
+    .find((s) => s.position === "Java");
+  assert.equal(java.weeks, 1);
+  assert.equal(java.contacted, 100); // chỉ còn tuần 19/07
+  assert.equal(java.target, 5);
 });
 
 test("positionSnapshots: status ontrack/filled + stale khi tuần cũ hơn max", () => {
   const snaps = positionSnapshots(posRows, { interviewTarget: 5 });
   const devops = snaps.find((s) => s.position === "DevOps");
-  assert.equal(devops.status, "ontrack"); // 6 >= 5
+  assert.equal(devops.status, "ontrack"); // 6 >= 5×1
   assert.equal(devops.stale, true);       // 05/07 < 19/07
   const ai = snaps.find((s) => s.position === "AI");
   assert.equal(ai.status, "filled");
