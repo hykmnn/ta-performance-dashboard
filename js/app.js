@@ -176,9 +176,6 @@ function renderKpiBenchmark() {
   if (state.recruiter) list = list.filter((x) => x.recruiter === state.recruiter);
   if (!list.length) { container.innerHTML = `<div class="kpi-empty">No activity for ${monthLabel(state.kpiMonth)}.</div>`; return; }
 
-  const bonusLine = (label, amount) => amount
-    ? `<div class="b-line"><span>${label}</span><b>+${fmtVND(amount)}</b></div>` : "";
-
   container.innerHTML = list.map((x) => `
     <div class="kpi-row">
       <div class="kpi-who">
@@ -188,18 +185,25 @@ function renderKpiBenchmark() {
       ${progressCell("Interviews", x.interviews, INTERVIEW_TARGET, x.interviewsBonus || 1000000)}
       ${progressCell("Ready to Offer", x.rto, RTO_TARGET, x.rtoBonus || 1000000,
         x.rtoLive ? "AZURE BOARD" : "")}
+      <div class="kpi-cell">
+        <div class="progress-label"><span>Success Hires</span><span><b>${x.achievements.length}</b></span></div>
+        ${x.achievements.length
+          ? `<div class="chips">${x.achievements.map((a) =>
+              `<span class="chip" title="${esc(a.title || "")}">${esc(a.kpiType)} <small>+${fmtBonusShort(a.bonus)}</small></span>`).join("")}</div>`
+          : `<div class="hires-empty">Chưa có hire trong tháng</div>`}
+        <div class="met">${x.achievementsBonus ? "✓ +" + fmtVND(x.achievementsBonus) : "&nbsp;"}</div>
+      </div>
       <div class="kpi-bonus">
         <div class="amount">${fmtVND(x.totalBonus)}</div>
         <div class="label">EST. BONUS THIS MONTH</div>
         <div class="bonus-lines">
-          ${bonusLine(`Interviews ≥ ${INTERVIEW_TARGET}`, x.interviewsBonus)}
-          ${bonusLine(`Ready to Offer ≥ ${RTO_TARGET}`, x.rtoBonus)}
-          ${bonusLine("Top-up (đạt cả 2)", x.topupBonus)}
-          ${bonusLine(`Success hires (${x.achievements.length})`, x.achievementsBonus)}
-          ${x.totalBonus === 0 ? `<div class="b-line none">Chưa đạt mốc bonus nào</div>` : ""}
+          ${[["Interviews", x.interviewsBonus], ["Ready to Offer", x.rtoBonus],
+             ["Success Hires", x.achievementsBonus]].map(([label, amount]) => `
+            <div class="b-line ${amount ? "" : "zero"}">
+              <span>${label}</span><b>${amount ? "+" + fmtVND(amount) : "0 ₫"}</b>
+            </div>`).join("")}
+          ${x.topupBonus ? `<div class="b-line"><span>Top-up</span><b>+${fmtVND(x.topupBonus)}</b></div>` : ""}
         </div>
-        ${x.achievements.length ? `<div class="chips">${x.achievements.map((a) =>
-          `<span class="chip" title="${esc(a.title || "")}">${esc(a.kpiType)} <small>+${fmtBonusShort(a.bonus)}</small></span>`).join("")}</div>` : ""}
       </div>
     </div>`).join("");
 }
