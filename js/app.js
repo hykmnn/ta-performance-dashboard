@@ -3,7 +3,7 @@ import { DEMO_FUNNEL, DEMO_ACHIEVEMENTS } from "./data-demo.js";
 import { initEntryUI } from "./entry.js";
 import {
   filterRows, totals, rates, outcomeDistribution, leaderboard, monthlyKpi,
-  positionSnapshots, INTERVIEW_TARGET, RTO_TARGET,
+  positionSnapshots, rtoBenchmark, INTERVIEW_TARGET, RTO_TARGET,
 } from "./metrics.js";
 
 // Loại data test / người ngoài team TA khỏi mọi thống kê.
@@ -24,6 +24,8 @@ const OUTCOME_COLORS = {
 const state = {
   rows: [], achievements: [],
   range: "all", recruiter: "", kpiMonth: null, // "YYYY-MM"
+  activeStacks: [], // Admin chọn — benchmark RTO chạy trên danh sách này
+  rtoFetcher: null, // hàm lấy RTO items (demo hoặc Azure Board)
 };
 
 const fmtVND = (n) => n.toLocaleString("en-US") + " ₫";
@@ -230,6 +232,55 @@ function renderPositions() {
   }).join("");
 }
 
+// Card "Ready to Offer vs KPI" — RTO items live từ Azure Board, benchmark
+// trên danh sách active stacks do Admin chọn (kể cả stack 0 ứng viên).
+// Load độc lập: board lỗi/chưa cấp quyền thì phần còn lại vẫn chạy.
+async function renderRtoBenchmark() {
+  const { rtoTargetMin: min, rtoTargetMax: max } = CONFIG.ado;
+  const el = $("#offer-pipeline");
+  el.hidden = false;
+  const head = `<div class="card-head"><h2>🎯 Ready to Offer vs KPI</h2>
+    <span class="card-sub">TARGET ${min}–${max} / ACTIVE STACK · AZURE BOARD</span></div>`;
+  if (!state.activeStacks.length) {
+    el.innerHTML = `${head}<div class="kpi-empty">Admin chưa chọn active tech stacks —
+      vào <b>Admin → Active tech stacks</b> để tick các vị trí đang tuyển.</div>`;
+    return;
+  }
+  el.innerHTML = `${head}<div class="kpi-empty">Loading…</div>`;
+  let items;
+  try { items = await state.rtoFetcher(); }
+  catch (e) {
+    el.innerHTML = `${head}<div class="kpi-empty">Không tải được từ Azure Board — ${esc(e.message)}</div>`;
+    return;
+  }
+  const bench = rtoBenchmark(items, {
+    activeStacks: state.activeStacks, aliases: CONFIG.stackAliases, min,
+  });
+  const totalRto = bench.reduce((s, b) => s + b.rto, 0);
+  const withTarget = bench.filter((b) => !b.noTarget);
+  const behind = withTarget.filter((b) => b.gap > 0).length;
+  el.innerHTML = `${head}
+    <div class="op-summary"><b>${totalRto}</b> candidates ready to offer ·
+      <b class="${behind ? "warn" : "ok"}">${behind}</b>/${withTarget.length} active stacks dưới target</div>
+    <div class="op-list">
+      ${bench.map((b) => `
+        <div class="rto-row">
+          <div class="rto-head">
+            <span class="rto-stack">${esc(b.stack)}</span>
+            ${b.noTarget
+              ? `<span class="pos-badge filled">${b.rto} · NGOÀI DANH SÁCH</span>`
+              : `<span class="pos-badge ${b.gap ? "red" : "ontrack"}">
+                  ${b.gap ? `${b.rto}/${min} · CẦN THÊM ${b.gap}` : `${b.rto}/${min} ✓`}</span>`}
+          </div>
+          ${b.noTarget ? "" : `<div class="progress"><i class="${b.gap ? "" : "hit"}"
+            style="width:${Math.min(100, (b.rto / min) * 100)}%"></i></div>`}
+          ${b.candidates.length ? `<div class="rto-names">${b.candidates.map((c) =>
+            `<a href="${esc(c.url)}" target="_blank" rel="noopener" title="${esc(c.title)}">${esc(c.name)}</a> <small>(${esc(c.recruiter)})</small>`
+          ).join(" · ")}</div>` : ""}
+        </div>`).join("")}
+    </div>`;
+}
+
 function renderAll() {
   const rows = activeRows();
   const t = totals(rows);
@@ -318,7 +369,25 @@ async function boot() {
     fillRecruiterFilter();
     bindEvents(() => renderAll());
     renderAll();
-    initEntryUI({ isDemo: true, account: { name: "Demo User", username: "demo" }, api: demoApi(), reload: async () => { fillRecruiterFilter(); renderAll(); } });
+    initEntryUI({
+      isDemo: true, account: { name: "Demo User", username: "demo" }, api: demoApi(),
+      reload: async () => { fillRecruiterFilter(); renderAll(); },
+      stacks: {
+        get: () => state.activeStacks,
+        save: async (arr) => { state.activeStacks = arr; renderRtoBenchmark(); },
+      },
+    });
+    state.activeStacks = ["Java", "Backend Web", "BA", "DevOps", "QA"];
+    state.rtoFetcher = async () => [
+      { id: 1, title: "M1 Java (EN 6.0) / SU - Nguyen Van A", recruiter: "AnhTD", url: "#" },
+      { id: 2, title: "M2/S1 Java (EN 6.0) / TO - Tran Thi B", recruiter: "MyLTP", url: "#" },
+      { id: 3, title: "M1 BA (EN 6.0) / TO - Le Van C", recruiter: "LyPK", url: "#" },
+      { id: 4, title: "M1+ BE Web (EN 7.0) / SU - Pham Van D", recruiter: "DucPM", url: "#" },
+      { id: 5, title: "M1 QA / TO - E", url: "#" }, { id: 6, title: "M1 QA / TO - F", url: "#" },
+      { id: 7, title: "M1 QA / TO - G", url: "#" }, { id: 8, title: "M1 QA / TO - H", url: "#" },
+      { id: 9, title: "VB Growth Assistant (EN 6.0) / BD - I", recruiter: "VietBN", url: "#" },
+    ];
+    renderRtoBenchmark();
     return;
   }
 
@@ -345,7 +414,23 @@ async function boot() {
           account: graph.currentAccount(),
           api: graph,
           reload: loadDashboard,
+          stacks: {
+            get: () => state.activeStacks,
+            save: async (arr) => {
+              await graph.saveActiveStacks(arr);
+              state.activeStacks = arr;
+              renderRtoBenchmark();
+            },
+          },
         });
+        (async () => {
+          try {
+            const ado = await import("./ado.js");
+            state.rtoFetcher = ado.getRtoItems;
+            state.activeStacks = await graph.getActiveStacks().catch(() => []);
+          } catch { state.rtoFetcher = async () => []; }
+          renderRtoBenchmark();
+        })();
       }
     } catch (err) {
       const msg = err instanceof PermissionError

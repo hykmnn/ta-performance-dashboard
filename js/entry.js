@@ -171,9 +171,20 @@ export async function openAdmin() {
   const loggedPositions = new Set(funnel.filter((r) => week(r.WeekEnding) === latestWeek).map((r) => r.Position));
   const missing = CONFIG.positions.filter((p) => !loggedPositions.has(p));
 
+  const currentStacks = ctx.stacks ? ctx.stacks.get() : [];
   sec.innerHTML = `
     <div class="card-head"><h2>🛠 Admin — Recent Entries</h2>
       <button class="btn-plain" id="admin-close">Close</button></div>
+    ${ctx.stacks ? `
+    <h3 class="admin-h3">Active tech stacks — benchmark Ready to Offer (${CONFIG.ado.rtoTargetMin}–${CONFIG.ado.rtoTargetMax}/stack)</h3>
+    <div class="stack-picker" id="stack-picker">
+      ${CONFIG.positions.map((p) => `
+        <label class="stack-chip">
+          <input type="checkbox" value="${esc(p)}" ${currentStacks.includes(p) ? "checked" : ""}>
+          <span>${esc(p)}</span>
+        </label>`).join("")}
+      <button class="btn-primary" id="stacks-save">Save stacks</button>
+    </div>` : ""}
     <p class="kpi-note">Tuần mới nhất (<b>${latestWeek || "—"}</b>) còn thiếu:
       ${missing.length ? missing.map((p) => `<span class="chip">${esc(p)}</span>`).join(" ") : "<b>đủ 14 vị trí ✓</b>"}</p>
     <h3 class="admin-h3">Funnel entries (${funnel.length})</h3>
@@ -204,6 +215,20 @@ export async function openAdmin() {
     </table></div>`;
 
   $("#admin-close").addEventListener("click", () => { sec.hidden = true; });
+  const saveBtn = $("#stacks-save");
+  if (saveBtn) saveBtn.addEventListener("click", async () => {
+    const selected = [...sec.querySelectorAll('#stack-picker input:checked')].map((i) => i.value);
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving…";
+    try {
+      await ctx.stacks.save(selected);
+      toast(ctx.isDemo ? "DEMO — đã áp dụng (chưa lưu thật)." : "✓ Đã lưu active stacks.");
+    } catch (e) {
+      toast("Không lưu được: " + e.message, false);
+    }
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Save stacks";
+  });
   sec.querySelectorAll(".btn-del").forEach((b) => b.addEventListener("click", async () => {
     if (!confirm("Xóa dòng này? (không hoàn tác được)")) return;
     b.disabled = true;

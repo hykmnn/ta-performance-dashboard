@@ -47,18 +47,22 @@ export async function signIn() {
   await msalApp.loginRedirect({ scopes: SCOPES }); // rời trang → quay lại sau khi đăng nhập
 }
 
-async function getToken() {
-  const account = msalApp.getAllAccounts()[0];
+// Lấy token cho resource bất kỳ (SharePoint, Azure DevOps...). Dùng chung
+// cho graph.js và ado.js — mỗi resource một scope riêng, MSAL tự cache.
+export async function acquireToken(scopes) {
+  const account = msalApp?.getAllAccounts()[0];
   if (!account) throw new Error("Not signed in");
   try {
-    const r = await msalApp.acquireTokenSilent({ scopes: SCOPES, account });
+    const r = await msalApp.acquireTokenSilent({ scopes, account });
     return r.accessToken;
   } catch {
     // Cần consent/scope mới → redirect cả trang rồi quay lại.
-    await msalApp.acquireTokenRedirect({ scopes: SCOPES, account });
+    await msalApp.acquireTokenRedirect({ scopes, account });
     return new Promise(() => {}); // trang sẽ rời đi — treo promise cho tới lúc đó
   }
 }
+
+const getToken = () => acquireToken(SCOPES);
 
 async function spGet(url, token) {
   const res = await fetch(url, {
@@ -171,6 +175,31 @@ export function deleteItem(listTitle, id) {
   return spWrite(`${siteUrl()}/_api/web/lists/getbytitle('${encodeURIComponent(listTitle)}')/items(${id})`, {
     headers: { "X-HTTP-Method": "DELETE", "IF-MATCH": "*" },
   });
+}
+
+// Settings dùng chung, lưu trong list "TA Settings" (Title = key, Value = JSON).
+export async function getActiveStacks() {
+  const token = await getToken();
+  const data = await spGet(
+    `${siteUrl()}/_api/web/lists/getbytitle('${encodeURIComponent(CONFIG.settingsList)}')/items` +
+    `?$select=Id,Title,Value&$filter=Title eq 'activeStacks'&$top=1`, token);
+  const item = data.value?.[0];
+  if (!item) return [];
+  try { return JSON.parse(item.Value) || []; } catch { return []; }
+}
+
+export async function saveActiveStacks(stacks) {
+  const token = await getToken();
+  const base = `${siteUrl()}/_api/web/lists/getbytitle('${encodeURIComponent(CONFIG.settingsList)}')/items`;
+  const data = await spGet(`${base}?$select=Id,Title&$filter=Title eq 'activeStacks'&$top=1`, token);
+  const existing = data.value?.[0];
+  if (existing) {
+    return spWrite(`${base}(${existing.Id})`, {
+      headers: { "X-HTTP-Method": "MERGE", "IF-MATCH": "*" },
+      body: { Value: JSON.stringify(stacks) },
+    });
+  }
+  return spWrite(base, { body: { Title: "activeStacks", Value: JSON.stringify(stacks) } });
 }
 
 // Người dùng thật của site (cho dropdown Recruiter).

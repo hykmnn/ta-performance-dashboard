@@ -85,6 +85,66 @@ export function leaderboard(rows) {
     .sort((a, b) => b.offers - a.offers || b.intake - a.intake);
 }
 
+// Parse tech stack từ title work item trên Azure Board.
+// Title chuẩn: "<level> <Stack> (<ngôn ngữ>) / <mã KH> - <ứng viên> - ..."
+// Level: M1, M2/S1, M1+, FTE J2, S1/S2... — bỏ prefix level rồi lấy phần
+// trước dấu "(" (hoặc trước " / " nếu không có ngoặc).
+export function stackFromTitle(title) {
+  let s = String(title).trim();
+  s = s.replace(/^FTE\s+/i, "");
+  s = s.replace(/^(?:[MSJ]\d\+?(?:\/[MSJ]\d\+?)*\s+)+/i, "");
+  const cut = Math.min(
+    ...[s.indexOf(" ("), s.indexOf(" / ")].filter((i) => i > 0),
+  );
+  if (Number.isFinite(cut)) s = s.slice(0, cut);
+  return s.trim();
+}
+
+// Match title work item vào 1 position (từ danh sách Position của list).
+// So khớp theo word-boundary với tên position + các alias; token dài hơn
+// thắng (VD "BE Web" thắng "BE"). Trả về tên position hoặc null.
+export function positionForTitle(title, positions, aliases = {}) {
+  const t = String(title);
+  let best = null;
+  let bestLen = 0;
+  for (const pos of positions) {
+    for (const token of [pos, ...(aliases[pos] || [])]) {
+      const re = new RegExp(`(^|[^A-Za-z0-9])${token.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}($|[^A-Za-z0-9])`, "i");
+      if (re.test(t) && token.length > bestLen) {
+        best = pos;
+        bestLen = token.length;
+      }
+    }
+  }
+  return best;
+}
+
+// Benchmark KPI "luôn có min RTO candidates / active tech stack".
+// activeStacks do Admin chọn (subset của Position) — mọi stack được chọn
+// đều có hàng, kể cả 0 RTO. Card không match stack nào → nhóm "Khác"
+// (không có target). rtoItems: [{title, recruiter, url}].
+export function rtoBenchmark(rtoItems, { activeStacks = [], aliases = {}, min = 4 } = {}) {
+  if (!activeStacks.length) return [];
+  const rows = new Map(activeStacks.map((s) => [s, { stack: s, rto: 0, candidates: [], gap: min }]));
+  const other = { stack: "Khác", rto: 0, candidates: [], gap: 0, noTarget: true };
+  for (const it of rtoItems) {
+    const stack = positionForTitle(it.title, activeStacks, aliases);
+    const g = stack ? rows.get(stack) : other;
+    g.rto++;
+    g.candidates.push({
+      name: (String(it.title).split(" - ")[1] || it.title).trim(),
+      recruiter: it.recruiter || "—",
+      title: it.title,
+      url: it.url || "",
+    });
+  }
+  const out = [...rows.values()]
+    .map((g) => ({ ...g, gap: Math.max(0, min - g.rto) }))
+    .sort((a, b) => b.gap - a.gap || a.stack.localeCompare(b.stack));
+  if (other.rto > 0) out.push(other);
+  return out;
+}
+
 // Validate 1 dòng nhập funnel. Trả về null nếu hợp lệ, ngược lại là thông
 // báo lỗi tiếng Việt. Interviews KHÔNG ràng với Applications (nhiều vòng PV).
 export function validateFunnelEntry(v) {
