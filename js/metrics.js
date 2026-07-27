@@ -146,7 +146,10 @@ export function rtoBenchmark(rtoItems, { activeStacks = [], aliases = {}, min = 
 }
 
 // Validate 1 dòng nhập funnel. Trả về null nếu hợp lệ, ngược lại là thông
-// báo lỗi tiếng Việt. Interviews KHÔNG ràng với Applications (nhiều vòng PV).
+// báo lỗi tiếng Việt. KHÔNG ràng buộc thứ tự giữa các stage: data là flow
+// theo tuần, ứng viên chuyển stage lệch tuần là chuyện bình thường (offer
+// tuần này cho người interview tuần trước, hire tuần này cho offer tuần
+// trước...) nên Offers > Interviews trong cùng 1 tuần vẫn hợp lệ.
 export function validateFunnelEntry(v) {
   const fields = [
     ["contacted", "Contacted"], ["responses", "Responses"], ["applications", "Applications"],
@@ -158,10 +161,6 @@ export function validateFunnelEntry(v) {
     if (n < 0) return `${label}: phải >= 0.`;
     if (!Number.isInteger(n)) return `${label}: phải là số nguyên.`;
   }
-  if (v.responses > v.contacted) return "Responses không thể lớn hơn Contacted.";
-  if (v.applications > v.responses) return "Applications không thể lớn hơn Responses.";
-  if (v.offers > v.interviews) return "Offers không thể lớn hơn Interviews.";
-  if (v.hires > v.offers) return "Hires không thể lớn hơn Offers.";
   return null;
 }
 
