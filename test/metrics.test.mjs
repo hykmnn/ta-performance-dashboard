@@ -218,13 +218,17 @@ test("validateFunnelEntry: hợp lệ → null", () => {
   assert.equal(validateFunnelEntry({ contacted: 10, responses: 8, applications: 5, interviews: 7, offers: 2, hires: 1 }), null);
 });
 
-test("validateFunnelEntry: bắt lỗi thứ tự funnel và số âm/lẻ", () => {
-  assert.match(validateFunnelEntry({ contacted: 5, responses: 8, applications: 5, interviews: 1, offers: 0, hires: 0 }), /Responses/);
-  assert.match(validateFunnelEntry({ contacted: 10, responses: 8, applications: 9, interviews: 1, offers: 0, hires: 0 }), /Applications/);
-  assert.match(validateFunnelEntry({ contacted: 10, responses: 8, applications: 5, interviews: 2, offers: 3, hires: 0 }), /Offers/);
-  assert.match(validateFunnelEntry({ contacted: 10, responses: 8, applications: 5, interviews: 2, offers: 2, hires: 3 }), /Hires/);
+test("validateFunnelEntry: bắt số âm/lẻ/không phải số", () => {
   assert.match(validateFunnelEntry({ contacted: -1, responses: 0, applications: 0, interviews: 0, offers: 0, hires: 0 }), />= 0/);
   assert.match(validateFunnelEntry({ contacted: 1.5, responses: 0, applications: 0, interviews: 0, offers: 0, hires: 0 }), /nguyên/);
+  assert.match(validateFunnelEntry({ contacted: 1, responses: NaN, applications: 0, interviews: 0, offers: 0, hires: 0 }), /số/);
+});
+
+test("validateFunnelEntry: KHÔNG ràng thứ tự stage — flow lệch tuần hợp lệ", () => {
+  // Tuần chỉ có offer cho ứng viên đã interview tuần trước: Offers > Interviews vẫn OK.
+  assert.equal(validateFunnelEntry({ contacted: 0, responses: 0, applications: 0, interviews: 0, offers: 2, hires: 0 }), null);
+  // Hire tuần này từ offer tuần trước.
+  assert.equal(validateFunnelEntry({ contacted: 10, responses: 8, applications: 5, interviews: 2, offers: 0, hires: 1 }), null);
 });
 
 // ---- stackFromTitle + rtoBenchmark (Azure Board) ----
