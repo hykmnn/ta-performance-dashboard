@@ -156,6 +156,16 @@ test("KPI_BONUS has all 7 types with correct amounts", () => {
   assert.equal(RTO_TARGET, 8);
 });
 
+// ---- weekKey ----
+import { weekKey } from "../js/metrics.js";
+
+test("weekKey: trả về thứ Hai đầu tuần ISO", () => {
+  assert.equal(weekKey("2026-07-19"), "2026-07-13"); // Chủ nhật → thứ Hai cùng tuần
+  assert.equal(weekKey("2026-07-13"), "2026-07-13"); // thứ Hai giữ nguyên
+  assert.equal(weekKey("2026-07-15"), "2026-07-13"); // thứ Tư
+  assert.equal(weekKey("2026-07-20"), "2026-07-20"); // thứ Hai tuần sau
+});
+
 // ---- positionSnapshots ----
 import { positionSnapshots } from "../js/metrics.js";
 
@@ -191,6 +201,35 @@ test("positionSnapshots: lọc bớt tuần thì số cộng dồn thay đổi t
   assert.equal(java.weeks, 1);
   assert.equal(java.contacted, 100); // chỉ còn tuần 19/07
   assert.equal(java.target, 5);
+});
+
+test("positionSnapshots: log theo NGÀY — nhiều ngày cùng tuần ISO = 1 tuần", () => {
+  const daily = [
+    { weekEnding: "2026-07-14", position: "QA", recruiter: "A", contacted: 10, responses: 3, applications: 1, interviews: 2, offers: 0, hires: 0, notes: "" },
+    { weekEnding: "2026-07-16", position: "QA", recruiter: "A", contacted: 8, responses: 2, applications: 1, interviews: 3, offers: 1, hires: 0, notes: "chờ offer" },
+    { weekEnding: "2026-07-21", position: "QA", recruiter: "A", contacted: 5, responses: 1, applications: 0, interviews: 1, offers: 0, hires: 0, notes: "" },
+  ];
+  const qa = positionSnapshots(daily, { interviewTarget: 5 })[0];
+  assert.equal(qa.weeks, 2);       // 14+16/7 cùng tuần ISO, 21/7 tuần sau
+  assert.equal(qa.target, 10);     // 5 × 2 tuần
+  assert.equal(qa.contacted, 23);
+  assert.equal(qa.interviews, 6);
+  assert.equal(qa.weekEnding, "2026-07-21"); // ngày log mới nhất
+  assert.equal(qa.stale, false);
+  assert.equal(qa.notes, "");      // notes chỉ của ngày mới nhất
+});
+
+test("positionSnapshots: stale theo tuần ISO chứ không theo ngày", () => {
+  const daily = [
+    { weekEnding: "2026-07-15", position: "BA", recruiter: "A", contacted: 1, responses: 0, applications: 0, interviews: 0, offers: 0, hires: 0, notes: "" },
+    { weekEnding: "2026-07-17", position: "AI", recruiter: "A", contacted: 1, responses: 0, applications: 0, interviews: 0, offers: 0, hires: 0, notes: "" },
+    { weekEnding: "2026-07-08", position: "GET", recruiter: "A", contacted: 1, responses: 0, applications: 0, interviews: 0, offers: 0, hires: 0, notes: "" },
+  ];
+  const snaps = positionSnapshots(daily, { interviewTarget: 5 });
+  // BA log 15/7, AI log 17/7 — cùng tuần ISO với ngày mới nhất → không stale.
+  assert.equal(snaps.find((s) => s.position === "BA").stale, false);
+  assert.equal(snaps.find((s) => s.position === "AI").stale, false);
+  assert.equal(snaps.find((s) => s.position === "GET").stale, true); // tuần trước
 });
 
 test("positionSnapshots: status ontrack/filled + stale khi tuần cũ hơn max", () => {
