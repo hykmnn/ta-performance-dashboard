@@ -2,6 +2,8 @@
 // rows: {weekEnding "YYYY-MM-DD", position, recruiter, contacted,
 //        responses, applications, interviews, offers, hires}
 // — 6 chỉ số khớp 1:1 với cột của list "Recruitment Funnel Weekly".
+// weekEnding = NGÀY log (TA log theo ngày, nhiều dòng/tuần đều được;
+// tên field giữ nguyên vì là cột SharePoint có sẵn).
 // achievements: {month "YYYY-MM", recruiter, kpiType, title}
 
 export const KPI_BONUS = {
@@ -21,6 +23,15 @@ export const RTO_BONUS = 1000000;
 export const TOPUP_BONUS = 500000;
 
 const FUNNEL_KEYS = ["contacted", "responses", "applications", "interviews", "offers", "hires"];
+
+// Thứ Hai đầu tuần ISO của 1 ngày — quy log-theo-ngày về "tuần có hoạt
+// động" khi tính target 5 interviews/tuần (log CN của data cũ rơi đúng
+// vào tuần nó thuộc về).
+export function weekKey(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d - ((new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7)));
+  return dt.toISOString().slice(0, 10);
+}
 
 const pct = (num, den) => (den > 0 ? Math.round((num / den) * 1000) / 10 : 0);
 
@@ -165,35 +176,36 @@ export function validateFunnelEntry(v) {
 }
 
 // Tiến độ từng vị trí đang tuyển trên tập rows được đưa vào (đã lọc theo
-// time/recruiter filter): CỘNG DỒN mọi tuần trong khoảng — đổi filter là số
-// đổi theo. Target phỏng vấn = interviewTarget × số tuần vị trí có log
-// (không phạt tuần không log — checklist "missing positions" ở Admin lo
-// việc đó). status: filled (có hire trong khoảng) / ontrack / red.
-// stale = tuần mới nhất của vị trí cũ hơn tuần mới nhất toàn hệ.
-// notes: chỉ lấy của tuần mới nhất (ghi chú cũ thường đã hết thời sự).
+// date/recruiter filter): CỘNG DỒN mọi dòng log trong khoảng — đổi filter
+// là số đổi theo. Log theo NGÀY: nhiều dòng cùng tuần ISO chỉ tính 1 tuần
+// hoạt động; target phỏng vấn = interviewTarget × số tuần đó (không phạt
+// tuần không log — checklist "missing positions" ở Admin lo việc đó).
+// status: filled (có hire trong khoảng) / ontrack / red.
+// stale = tuần ISO mới nhất của vị trí cũ hơn tuần ISO mới nhất toàn hệ.
+// notes: chỉ lấy của ngày log mới nhất (ghi chú cũ thường đã hết thời sự).
 export function positionSnapshots(rows, { interviewTarget = 5 } = {}) {
   if (!rows.length) return [];
-  const maxWeek = rows.reduce((m, r) => (r.weekEnding > m ? r.weekEnding : m), "");
+  const maxDate = rows.reduce((m, r) => (r.weekEnding > m ? r.weekEnding : m), "");
   const byPos = new Map();
   for (const r of rows) {
-    const g = byPos.get(r.position) || { rows: [], weeks: new Set() };
+    const g = byPos.get(r.position) || { rows: [], weeks: new Set(), latest: "" };
     g.rows.push(r);
-    g.weeks.add(r.weekEnding);
+    g.weeks.add(weekKey(r.weekEnding));
+    if (r.weekEnding > g.latest) g.latest = r.weekEnding;
     byPos.set(r.position, g);
   }
   const order = { red: 0, ontrack: 1, filled: 2 };
   return [...byPos.entries()].map(([position, g]) => {
     const t = totals(g.rows);
-    const week = [...g.weeks].sort().at(-1);
     const weeks = g.weeks.size;
     const target = interviewTarget * weeks;
-    const notes = g.rows.filter((r) => r.weekEnding === week)
+    const notes = g.rows.filter((r) => r.weekEnding === g.latest)
       .map((r) => (r.notes || "").trim()).filter(Boolean).join(" · ");
     const status = t.hires > 0 ? "filled" : t.interviews >= target ? "ontrack" : "red";
     return {
-      position, weekEnding: week, weeks, target, ...t, notes, status,
+      position, weekEnding: g.latest, weeks, target, ...t, notes, status,
       gap: status === "red" ? target - t.interviews : 0,
-      stale: week < maxWeek,
+      stale: weekKey(g.latest) < weekKey(maxDate),
       rates: rates(t),
     };
   }).sort((a, b) => order[a.status] - order[b.status] || b.gap - a.gap);

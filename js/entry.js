@@ -1,4 +1,4 @@
-// UI nhập liệu (Log Weekly / Log KPI) + màn Admin.
+// UI nhập liệu (Log Daily / Log KPI) + màn Admin.
 // Không gọi mạng trực tiếp — mọi thao tác data đi qua ctx.api để app.js
 // quyết định demo (in-memory) hay live (SharePoint REST).
 import { CONFIG } from "./config.js";
@@ -19,14 +19,10 @@ export function toast(msg, ok = true) {
   el._t = setTimeout(() => { el.hidden = true; }, 4000);
 }
 
-function lastSundays(n = 8) {
-  const out = [];
+// Hôm nay theo giờ local (không dùng toISOString trực tiếp — lệch múi giờ).
+function todayISO() {
   const d = new Date();
-  d.setDate(d.getDate() - ((d.getDay() + 7) % 7)); // lùi về Chủ nhật gần nhất
-  for (let i = 0; i < n; i++) {
-    out.push(new Date(d.getTime() - i * 7 * 86400000).toISOString().slice(0, 10));
-  }
-  return out;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function lastMonths(n = 6) {
@@ -84,13 +80,11 @@ const numField = (name, label) => `
     <input type="number" name="${name}" min="0" step="1" value="0" required></label>`;
 
 export function openWeeklyModal() {
-  const weeks = lastSundays();
-  modal("Log Weekly Funnel", `
+  const today = todayISO();
+  modal("Log Daily Funnel", `
     <div class="f-row">
-      <label class="f-field"><span>Week ending (Sunday)</span>
-        <select name="weekEnding">${weeks.map((w, i) =>
-          `<option value="${w}" ${i === 0 ? "selected" : ""}>${w}${i === 0 ? " (this week)" : ""}</option>`).join("")}
-        </select></label>
+      <label class="f-field"><span>Date</span>
+        <input type="date" name="weekEnding" value="${today}" max="${today}" required></label>
       <label class="f-field"><span>Position</span>
         <select name="position">${CONFIG.positions.map((p) => `<option>${esc(p)}</option>`).join("")}</select></label>
     </div>
@@ -101,8 +95,9 @@ export function openWeeklyModal() {
     </div>
     <label class="f-field"><span>Notes (hiện ở Open Positions)</span>
       <input type="text" name="notes" placeholder="VD: Ready to offer 2 bạn M1..."></label>
-    <p class="f-hint">Quy tắc: Contacted ≥ Responses ≥ Applications · Offers ≤ Interviews · Hires ≤ Offers.
-      Nhập 1 dòng cho mỗi vị trí bạn phụ trách mỗi tuần.</p>
+    <p class="f-hint">Nhập số phát sinh TRONG NGÀY cho vị trí bạn phụ trách — log nhiều
+      lần/ngày hoặc bỏ trống ngày không có hoạt động đều được, dashboard tự cộng dồn.
+      Có thể chọn ngày trong quá khứ để bổ sung.</p>
   `, async (fd) => {
     const entry = {
       weekEnding: fd.get("weekEnding"),
@@ -167,8 +162,13 @@ export async function openAdmin() {
 
   const { funnel, kpi } = data;
   const week = (iso) => String(iso || "").slice(0, 10);
-  const latestWeek = funnel.reduce((m, r) => (week(r.WeekEnding) > m ? week(r.WeekEnding) : m), "");
-  const loggedPositions = new Set(funnel.filter((r) => week(r.WeekEnding) === latestWeek).map((r) => r.Position));
+  // Log theo ngày → checklist "còn thiếu" xét cửa sổ 7 ngày gần nhất
+  // (tính từ ngày log mới nhất), không xét đúng 1 ngày.
+  const latestDay = funnel.reduce((m, r) => (week(r.WeekEnding) > m ? week(r.WeekEnding) : m), "");
+  const cutoff = latestDay
+    ? new Date(new Date(latestDay + "T12:00:00Z").getTime() - 6 * 86400000).toISOString().slice(0, 10)
+    : "";
+  const loggedPositions = new Set(funnel.filter((r) => week(r.WeekEnding) >= cutoff).map((r) => r.Position));
   const missing = CONFIG.positions.filter((p) => !loggedPositions.has(p));
 
   const currentStacks = ctx.stacks ? ctx.stacks.get() : [];
@@ -185,11 +185,11 @@ export async function openAdmin() {
         </label>`).join("")}
       <button class="btn-primary" id="stacks-save">Save stacks</button>
     </div>` : ""}
-    <p class="kpi-note">Tuần mới nhất (<b>${latestWeek || "—"}</b>) còn thiếu:
+    <p class="kpi-note">7 ngày gần nhất (${cutoff || "—"} → <b>${latestDay || "—"}</b>) còn thiếu:
       ${missing.length ? missing.map((p) => `<span class="chip">${esc(p)}</span>`).join(" ") : "<b>đủ 14 vị trí ✓</b>"}</p>
     <h3 class="admin-h3">Funnel entries (${funnel.length})</h3>
     <div class="admin-scroll"><table class="lb-table admin-table">
-      <thead><tr><th>Week</th><th>Position</th><th>C/R/A/I/O/H</th><th>Notes</th><th>By</th><th>Created</th><th></th></tr></thead>
+      <thead><tr><th>Date</th><th>Position</th><th>C/R/A/I/O/H</th><th>Notes</th><th>By</th><th>Created</th><th></th></tr></thead>
       <tbody>${funnel.map((r) => `
         <tr>
           <td>${week(r.WeekEnding)}</td><td>${esc(r.Position || "")}</td>

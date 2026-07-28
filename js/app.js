@@ -23,7 +23,10 @@ const OUTCOME_COLORS = {
 
 const state = {
   rows: [], achievements: [],
-  range: "all", recruiter: "", kpiMonth: null, // "YYYY-MM"
+  // range: "all" | "30" | "7" | "custom" — preset pill hoặc user tự chọn
+  // ngày trong 2 ô date; fromDate/toDate chỉ dùng khi range = "custom".
+  range: "all", fromDate: null, toDate: null,
+  recruiter: "", kpiMonth: null, // "YYYY-MM"
   activeStacks: [], // Admin chọn — benchmark RTO chạy trên danh sách này
   rtoFetcher: null, // hàm lấy RTO items (demo hoặc Azure Board)
   rtoItems: null, // cache RTO items sau lần fetch — KPI benchmark dùng lại
@@ -45,12 +48,43 @@ function maxWeek() {
   return state.rows.reduce((m, r) => (r.weekEnding > m ? r.weekEnding : m), "0000-00-00");
 }
 
+function minWeek() {
+  return state.rows.reduce((m, r) => (r.weekEnding < m ? r.weekEnding : m), "9999-99-99");
+}
+
+// Khoảng ngày đang áp dụng. Preset 7/30 days tính lùi từ ngày log mới nhất
+// (bao gồm ngày đó); "all" = null (không lọc); "custom" = 2 ô date của user.
+function effectiveRange() {
+  if (!state.rows.length) return { from: null, to: null };
+  if (state.range === "custom") return { from: state.fromDate, to: state.toDate };
+  if (state.range === "all") return { from: null, to: null };
+  const to = maxWeek();
+  return { from: isoAddDays(to, -(Number(state.range) - 1)), to };
+}
+
+// Khoảng hiển thị trên 2 ô date + label report: fallback về min/max của
+// data để user luôn NHÌN THẤY report đang chạy từ ngày nào đến ngày nào.
+function displayRange() {
+  const { from, to } = effectiveRange();
+  return {
+    from: from || (state.rows.length ? minWeek() : ""),
+    to: to || (state.rows.length ? maxWeek() : ""),
+  };
+}
+
+function syncDateInputs() {
+  const { from, to } = displayRange();
+  $("#date-from").value = from;
+  $("#date-to").value = to;
+}
+
 function activeRows() {
-  const opts = { recruiter: state.recruiter || undefined };
-  if (state.range !== "all" && state.rows.length) {
-    opts.fromDate = isoAddDays(maxWeek(), -Number(state.range));
-  }
-  return filterRows(state.rows, opts);
+  const { from, to } = effectiveRange();
+  return filterRows(state.rows, {
+    recruiter: state.recruiter || undefined,
+    fromDate: from || undefined,
+    toDate: to || undefined,
+  });
 }
 
 function months() {
@@ -90,7 +124,8 @@ function renderTopPerformer(lb) {
     return;
   }
   const top = lb[0];
-  const scope = state.range === "all" ? "all-time" : `last ${state.range} days`;
+  const { from, to } = displayRange();
+  const scope = state.range === "all" ? "all-time" : `${fmtDate(from)} → ${fmtDate(to)}`;
   el.innerHTML = `
     <span class="tp-tag">👑 TOP PERFORMER</span>
     <div class="tp-row">
@@ -213,9 +248,9 @@ function renderPositions() {
   // Tôn trọng cả time filter lẫn recruiter filter — số liệu mỗi vị trí là
   // TỔNG các tuần trong khoảng đang chọn; target = 5/tuần × số tuần có log.
   const snaps = positionSnapshots(activeRows(), { interviewTarget: target });
+  const { from, to } = displayRange();
   $("#positions-sub").textContent =
-    `INTERVIEW TARGET = ${target}/WEEK · TOTALS ` +
-    (state.range === "all" ? "ALL TIME" : `LAST ${state.range} DAYS`);
+    `INTERVIEW TARGET = ${target}/WEEK · TOTALS ${from ? fmtDate(from) : "—"} → ${to ? fmtDate(to) : "—"}`;
 
   const counts = {
     red: snaps.filter((s) => s.status === "red").length,
@@ -322,6 +357,7 @@ async function renderRtoBenchmark() {
 }
 
 function renderAll() {
+  syncDateInputs();
   const rows = activeRows();
   const t = totals(rows);
   renderKpiCards(t, rates(t));
@@ -353,6 +389,19 @@ function bindEvents(reload) {
     state.range = btn.dataset.range;
     renderAll();
   });
+  // User sửa 1 trong 2 ô ngày → chuyển sang chế độ custom, bỏ highlight pill.
+  const onDateChange = () => {
+    let from = $("#date-from").value || null;
+    let to = $("#date-to").value || null;
+    if (from && to && from > to) [from, to] = [to, from];
+    state.range = "custom";
+    state.fromDate = from;
+    state.toDate = to;
+    document.querySelectorAll(".pill").forEach((p) => p.classList.remove("active"));
+    renderAll();
+  };
+  $("#date-from").addEventListener("change", onDateChange);
+  $("#date-to").addEventListener("change", onDateChange);
   $("#recruiter-filter").addEventListener("change", (e) => {
     state.recruiter = e.target.value;
     renderAll();
