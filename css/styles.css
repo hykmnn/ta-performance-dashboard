@@ -228,6 +228,19 @@ main { max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; }
 .chip small { color: var(--blue-700); font-weight: 700; }
 .kpi-empty { color: var(--muted); text-align: center; padding: 20px; font-weight: 500; }
 
+/* Ô lọc khoảng ngày — luôn hiện From → To đang áp dụng */
+.date-range {
+  display: flex; align-items: center; gap: 6px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--bg); padding: 0 10px;
+}
+.date-range input[type="date"] {
+  border: none; background: transparent; color: var(--ink);
+  font-family: var(--font-sans); font-size: 12.5px; font-weight: 600;
+  padding: 8px 0; outline: none; width: 118px;
+}
+.date-range .arrow { color: var(--muted); font-weight: 700; }
+
 /* Bảng quy tắc success-hire bonus + breakdown est. bonus */
 .kpi-legend { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 14px; }
 .kpi-legend .legend-title {
