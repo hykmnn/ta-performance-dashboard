@@ -186,7 +186,7 @@ export async function openAdmin() {
       <button class="btn-primary" id="stacks-save">Save stacks</button>
     </div>` : ""}
     <p class="kpi-note">7 ngày gần nhất (${cutoff || "—"} → <b>${latestDay || "—"}</b>) còn thiếu:
-      ${missing.length ? missing.map((p) => `<span class="chip">${esc(p)}</span>`).join(" ") : "<b>đủ 14 vị trí ✓</b>"}</p>
+      ${missing.length ? missing.map((p) => `<span class="chip">${esc(p)}</span>`).join(" ") : `<b>đủ ${CONFIG.positions.length} vị trí ✓</b>`}</p>
     <h3 class="admin-h3">Funnel entries (${funnel.length})</h3>
     <div class="admin-scroll"><table class="lb-table admin-table">
       <thead><tr><th>Date</th><th>Position</th><th>C/R/A/I/O/H</th><th>Notes</th><th>By</th><th>Created</th><th></th></tr></thead>

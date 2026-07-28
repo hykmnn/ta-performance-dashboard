@@ -29,12 +29,14 @@ export const CONFIG = {
     "Backend Web": ["BE Web", "BE", "Backend"],
     "Frontend Web": ["FE Web", "FE", "Frontend"],
     "UI/UX": ["UIUX", "UI-UX"],
+    "C#": [".NET"],
+    "Mobile": ["React Native", "Flutter", "iOS", "Android"],
   },
   // List settings dùng chung (Admin chọn active stacks...).
   settingsList: "TA Settings",
-  // 14 vị trí — khớp choice của cột Position trong list.
+  // Các vị trí đang tuyển — khớp choice của cột Position trong list.
   positions: ["Java", "Frontend Web", "Backend Web", "AI", "DevOps", "BA", "QA",
-    "PM", "UI/UX", "GET", "KAM", "MKT", "HR", "Comtor"],
+    "PM", "UI/UX", "GET", "KAM", "MKT", "HR", "Comtor", "Mobile", "C#"],
   isDemo() {
     return this.clientId === "YOUR_CLIENT_ID";
   },
