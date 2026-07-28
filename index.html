@@ -23,7 +23,7 @@
     <p class="landing-kicker">TALENT ACQUISITION · PERFORMANCE · KPI</p>
     <h1>Recognize the recruiters who deliver.</h1>
     <p class="landing-desc">
-      Live funnel numbers from the weekly recruitment log, team leaderboard and
+      Live funnel numbers from the team's daily recruitment log, leaderboard and
       monthly KPI benchmark with bonus tracking — all in one place.
     </p>
     <button id="btn-signin" class="btn-signin">Sign in with Microsoft</button>
@@ -51,11 +51,16 @@
         <button class="pill" data-range="30">30 Days</button>
         <button class="pill" data-range="7">7 Days</button>
       </div>
+      <div class="date-range" title="Khoảng ngày đang áp dụng — sửa để lọc tùy ý">
+        <input type="date" id="date-from">
+        <span class="arrow">→</span>
+        <input type="date" id="date-to">
+      </div>
       <select id="recruiter-filter" class="select">
         <option value="">All Recruiters</option>
       </select>
       <button id="btn-refresh" class="btn-icon" title="Refresh data">⟳</button>
-      <button id="btn-log-weekly" class="btn-primary" hidden>＋ Log Weekly</button>
+      <button id="btn-log-weekly" class="btn-primary" hidden>＋ Log Daily</button>
       <button id="btn-log-kpi" class="btn-primary outline" hidden>＋ Log KPI</button>
       <button id="btn-admin" class="btn-primary dark" hidden>Admin</button>
     </div>
