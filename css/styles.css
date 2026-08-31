@@ -189,6 +189,21 @@ main { max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; }
 .rto-actions button:hover { border-color: var(--blue); color: var(--blue-700); }
 .rto-actions button[data-status="Hired"]:hover { border-color: var(--success); color: var(--success); }
 .rto-actions button[data-status="Rejected"]:hover { border-color: var(--error); color: var(--error); }
+/* Danh bạ RTO theo role (modal rộng) + badge trạng thái */
+.rto-head-right { display: flex; align-items: center; gap: 12px; }
+.modal-wide { max-width: 860px; width: min(860px, 94vw); max-height: 86vh; overflow-y: auto; }
+.rto-status {
+  display: inline-block; padding: 2px 9px; border-radius: var(--pill);
+  font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
+}
+.rto-status.s-ready { background: var(--blue-100); color: var(--blue-700); }
+.rto-status.s-offered { background: var(--warning-bg, #FDF3E1); color: var(--warning-text, #8A5A00); }
+.rto-status.s-hired { background: #DFF5EC; color: var(--success); }
+.rto-status.s-rejected { background: #FBE7E7; color: var(--error); }
+.muted-row td { color: var(--ink-300); }
+.muted-row a { color: var(--ink-300); }
+.admin-h3 small { color: var(--muted); font-weight: 500; }
+
 /* Ô dán bảng Candidate Info từ Teams */
 .paste-box {
   width: 100%; border: 1px dashed var(--blue-300, var(--line)); border-radius: var(--radius);
