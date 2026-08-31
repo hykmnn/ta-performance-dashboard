@@ -166,11 +166,35 @@ main { max-width: 1280px; margin: 0 auto; padding: 18px 20px 40px; }
 .rto-section { margin-bottom: 18px; }
 .rto-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
 .rto-grid .progress { margin: 8px 0 2px; }
-.rto-names { margin-top: 8px; font-size: 11.5px; color: var(--muted); line-height: 1.7; }
+.rto-names { margin-top: 8px; font-size: 11.5px; color: var(--muted); }
 .rto-names a { color: var(--blue-700); font-weight: 600; text-decoration: none; }
 .rto-names a:hover { text-decoration: underline; }
+.rto-names b { color: var(--ink-700); }
 .rto-names small { color: var(--ink-300); }
 .rto-empty { color: var(--ink-300); font-style: italic; }
+/* 1 ứng viên = 1 hàng: info trái, nút chuyển trạng thái phải */
+.rto-cand {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 0; border-top: 1px dashed var(--line);
+}
+.rto-cand:first-child { border-top: none; }
+.rto-cand-info { display: flex; flex-direction: column; line-height: 1.5; min-width: 0; }
+.rto-cand-info .rto-meta { font-size: 10px; }
+.rto-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.rto-actions button {
+  border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+  border-radius: var(--radius-sm); font-size: 10px; font-weight: 700;
+  padding: 3px 7px; cursor: pointer;
+}
+.rto-actions button:hover { border-color: var(--blue); color: var(--blue-700); }
+.rto-actions button[data-status="Hired"]:hover { border-color: var(--success); color: var(--success); }
+.rto-actions button[data-status="Rejected"]:hover { border-color: var(--error); color: var(--error); }
+/* Ô dán bảng Candidate Info từ Teams */
+.paste-box {
+  width: 100%; border: 1px dashed var(--blue-300, var(--line)); border-radius: var(--radius);
+  background: var(--blue-50, var(--bg)); padding: 8px 10px; font-family: var(--font-mono);
+  font-size: 11px; color: var(--ink-700); resize: vertical;
+}
 
 /* Outcome */
 .outcome-row { margin: 12px 0; }
