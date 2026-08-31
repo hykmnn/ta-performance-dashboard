@@ -171,6 +171,65 @@ export function addAchievement(f) {
   });
 }
 
+// ---- Ready to Offer (list "TA Ready to Offer") ----
+// Mỗi item = 1 ứng viên TA log khi pass phỏng vấn, chờ offer.
+// RTODate = ngày vào trạng thái RTO (KPI tháng đếm theo ngày này);
+// RTOStatus = Ready | Offered | Hired | Rejected (stock benchmark chỉ đếm Ready).
+const RTO_SELECT = "Id,Title,Position,TechLevel,EngScore,Source,ProfileLink," +
+  "InterviewDate,Round,InterviewedBy,Assessment,JoiningDate,PotentialProject," +
+  "RTOStatus,RTODate,Author/Title";
+
+export async function getRtoEntries() {
+  const token = await getToken();
+  const items = await listItems(CONFIG.rtoList, RTO_SELECT, "Author", token);
+  return items.map((it) => ({
+    id: it.Id,
+    name: it.Title || "",
+    position: it.Position || "",
+    level: it.TechLevel || "",
+    eng: it.EngScore || "",
+    source: it.Source || "",
+    profileLink: it.ProfileLink || "",
+    interviewDate: String(it.InterviewDate || "").slice(0, 10),
+    round: it.Round || "",
+    interviewedBy: it.InterviewedBy || "",
+    assessment: it.Assessment || "",
+    joiningDate: it.JoiningDate || "",
+    potentialProject: it.PotentialProject || "",
+    status: it.RTOStatus || "Ready",
+    rtoDate: String(it.RTODate || "").slice(0, 10),
+    recruiter: it.Author?.Title || "Unknown",
+  })).filter((r) => r.rtoDate);
+}
+
+export function addRtoEntry(f) {
+  return spWrite(`${siteUrl()}/_api/web/lists/getbytitle('${encodeURIComponent(CONFIG.rtoList)}')/items`, {
+    body: {
+      Title: f.name,
+      Position: f.position,
+      TechLevel: f.level || "",
+      EngScore: f.eng || "",
+      Source: f.source || "",
+      ProfileLink: f.profileLink || "",
+      InterviewDate: f.interviewDate ? `${f.interviewDate}T12:00:00Z` : null,
+      Round: f.round || "",
+      InterviewedBy: f.interviewedBy || "",
+      Assessment: f.assessment || "",
+      JoiningDate: f.joiningDate || "",
+      PotentialProject: f.potentialProject || "",
+      RTOStatus: "Ready",
+      RTODate: `${f.rtoDate}T12:00:00Z`,
+    },
+  });
+}
+
+export function updateRtoStatus(id, status) {
+  return spWrite(`${siteUrl()}/_api/web/lists/getbytitle('${encodeURIComponent(CONFIG.rtoList)}')/items(${id})`, {
+    headers: { "X-HTTP-Method": "MERGE", "IF-MATCH": "*" },
+    body: { RTOStatus: status },
+  });
+}
+
 export function deleteItem(listTitle, id) {
   return spWrite(`${siteUrl()}/_api/web/lists/getbytitle('${encodeURIComponent(listTitle)}')/items(${id})`, {
     headers: { "X-HTTP-Method": "DELETE", "IF-MATCH": "*" },
@@ -220,11 +279,12 @@ export async function getRecentEntries() {
     spGet(`${siteUrl()}/_api/web/lists/getbytitle('${encodeURIComponent(list)}')/items` +
       `?$select=Id,Created,Author/Title,${select}&$expand=Author${expand ? "," + expand : ""}` +
       `&$orderby=Created desc&$top=100`, token);
-  const [funnel, kpi] = await Promise.all([
+  const [funnel, kpi, rto] = await Promise.all([
     q(CONFIG.funnelList, "WeekEnding,Position,CandidatesContacted,CandidatesResponses,Applications,Interviews,Offers,Hires,Notes"),
     q(CONFIG.kpiList, "Title,KPIMonth,KPIType,Recruiter/Title", "Recruiter").catch(() => ({ value: [] })),
+    q(CONFIG.rtoList, "Title,Position,TechLevel,RTOStatus,RTODate").catch(() => ({ value: [] })),
   ]);
-  return { funnel: funnel.value, kpi: kpi.value };
+  return { funnel: funnel.value, kpi: kpi.value, rto: rto.value };
 }
 
 export async function getData() {

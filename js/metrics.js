@@ -130,24 +130,19 @@ export function positionForTitle(title, positions, aliases = {}) {
   return best;
 }
 
-// Benchmark KPI "luôn có min RTO candidates / active tech stack".
+// Benchmark KPI "luôn có min ứng viên đang chờ offer / active tech stack".
 // activeStacks do Admin chọn (subset của Position) — mọi stack được chọn
-// đều có hàng, kể cả 0 RTO. Card không match stack nào → nhóm "Khác"
-// (không có target). rtoItems: [{title, recruiter, url}].
-export function rtoBenchmark(rtoItems, { activeStacks = [], aliases = {}, min = 4 } = {}) {
+// đều có hàng, kể cả 0 RTO. rtoItems: item từ list "TA Ready to Offer"
+// (đã lọc status Ready), position là choice tường minh nên không cần parse;
+// position không nằm trong activeStacks → nhóm "Khác" (không có target).
+export function rtoBenchmark(rtoItems, { activeStacks = [], min = 4 } = {}) {
   if (!activeStacks.length) return [];
   const rows = new Map(activeStacks.map((s) => [s, { stack: s, rto: 0, candidates: [], gap: min }]));
   const other = { stack: "Khác", rto: 0, candidates: [], gap: 0, noTarget: true };
   for (const it of rtoItems) {
-    const stack = positionForTitle(it.title, activeStacks, aliases);
-    const g = stack ? rows.get(stack) : other;
+    const g = rows.get(it.position) || other;
     g.rto++;
-    g.candidates.push({
-      name: (String(it.title).split(" - ")[1] || it.title).trim(),
-      recruiter: it.recruiter || "—",
-      title: it.title,
-      url: it.url || "",
-    });
+    g.candidates.push(it);
   }
   const out = [...rows.values()]
     .map((g) => ({ ...g, gap: Math.max(0, min - g.rto) }))
@@ -211,16 +206,18 @@ export function positionSnapshots(rows, { interviewTarget = 5 } = {}) {
   }).sort((a, b) => order[a.status] - order[b.status] || b.gap - a.gap);
 }
 
-// rtoItems (tùy chọn): card đang nằm ở cột Ready-to-offer trên Azure Board —
-// khi có thì RTO của recruiter = số card họ được assign (đồng bộ với section
-// "Ready to Offer vs KPI"); khi không (tháng quá khứ, board không có lịch sử)
-// fallback về cột Offers của funnel list.
+// rtoItems (tùy chọn): item từ list "TA Ready to Offer". RTO của recruiter
+// trong tháng = số ứng viên họ log với rtoDate thuộc tháng đó — đếm theo
+// FLOW nên tháng nào cũng có số đúng của tháng ấy (kể cả khi ứng viên sau
+// đó đã Offered/Hired/Rejected), và tháng đóng lại là số chốt cuối tháng.
+// Không truyền rtoItems → fallback cột Offers của funnel (tương thích cũ).
 export function monthlyKpi(rows, achievements, month, { rtoItems = null } = {}) {
   const mRows = rows.filter((r) => r.weekEnding.startsWith(month));
   const mAch = achievements.filter((a) => a.month === month);
   const rtoBy = new Map();
   for (const it of rtoItems || []) {
     if (!it.recruiter || it.recruiter === "—") continue;
+    if (!(it.rtoDate || "").startsWith(month)) continue;
     rtoBy.set(it.recruiter, (rtoBy.get(it.recruiter) || 0) + 1);
   }
   const recruiters = new Set([

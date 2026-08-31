@@ -2,7 +2,7 @@
 // Không gọi mạng trực tiếp — mọi thao tác data đi qua ctx.api để app.js
 // quyết định demo (in-memory) hay live (SharePoint REST).
 import { CONFIG } from "./config.js";
-import { validateFunnelEntry, KPI_BONUS } from "./metrics.js";
+import { validateFunnelEntry, KPI_BONUS, positionForTitle } from "./metrics.js";
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -115,6 +115,139 @@ export function openWeeklyModal() {
   });
 }
 
+// ---- Log Ready to Offer ----
+
+// Parse bảng "Candidate Info" dán từ Teams (mỗi dòng = "Label<tab/space>Value").
+// Chỉ lấy các field cần cho platform — bỏ nhóm lương theo yêu cầu.
+const TICKET_FIELDS = [
+  ["name", /^name\b/i],
+  ["position", /^position\b/i],
+  ["level", /^technical level\b/i],
+  ["eng", /^eng score(\s*\(elsa\))?/i],
+  ["source", /^source\b/i],
+  ["profileLink", /^profile link\b/i],
+  ["interviewDate", /^interview date\b/i],
+  ["round", /^round\b/i],
+  ["interviewedBy", /^interviewed by\b/i],
+  ["assessment", /^overall assessment\b/i],
+  ["joiningDate", /^possible joining date\b/i],
+  ["potentialProject", /^potential project\b/i],
+];
+
+// "6/5", "06-05-2026", "6/5/26" → ISO; không nhận diện được thì trả "".
+function normalizeDate(s) {
+  const m = String(s).match(/(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?/);
+  if (!m) return "";
+  let [, d, mo, y] = m;
+  y = y ? (y.length === 2 ? "20" + y : y) : String(new Date().getFullYear());
+  const dt = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d)));
+  return Number.isNaN(dt.getTime()) ? "" : dt.toISOString().slice(0, 10);
+}
+
+export function parseCandidateTicket(text) {
+  const out = {};
+  for (const raw of String(text).split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    for (const [key, re] of TICKET_FIELDS) {
+      const m = line.match(re);
+      if (m && !(key in out)) {
+        const val = line.slice(m[0].length).replace(/^[\s:\-–—|]+/, "").trim();
+        if (val) out[key] = val;
+      }
+    }
+  }
+  return out;
+}
+
+export function openRtoModal() {
+  const today = todayISO();
+  const textField = (name, label, placeholder = "") => `
+    <label class="f-field"><span>${label}</span>
+      <input type="text" name="${name}" placeholder="${esc(placeholder)}"></label>`;
+  modal("Log Ready to Offer", `
+    <label class="f-field"><span>Dán bảng Candidate Info từ Teams (tự điền form)</span>
+      <textarea name="paste" class="paste-box" rows="3"
+        placeholder="Copy bảng CANDIDATE TICKET trên channel Teams rồi dán vào đây…"></textarea></label>
+    <div class="f-row">
+      <label class="f-field"><span>Ngày ready to offer</span>
+        <input type="date" name="rtoDate" value="${today}" max="${today}" required></label>
+      <label class="f-field"><span>Position</span>
+        <select name="position">${CONFIG.positions.map((p) => `<option>${esc(p)}</option>`).join("")}</select></label>
+    </div>
+    <div class="f-row">
+      <label class="f-field"><span>Candidate name *</span>
+        <input type="text" name="name" required placeholder="Nguyen Van X"></label>
+      <label class="f-field"><span>Technical level</span>
+        <input type="text" name="level" placeholder="M2"></label>
+    </div>
+    <div class="f-row">
+      ${textField("eng", "ENG Score (ELSA)", "7.0")}
+      ${textField("source", "Source", "HRHunt - An Nguyen")}
+    </div>
+    ${textField("profileLink", "Profile link", "https://…")}
+    <div class="f-row">
+      <label class="f-field"><span>Interview date</span>
+        <input type="date" name="interviewDate" max="${today}"></label>
+      ${textField("round", "Round", "1 / ?")}
+    </div>
+    <div class="f-row">
+      ${textField("interviewedBy", "Interviewed by")}
+      ${textField("joiningDate", "Possible joining date", "~1 tháng")}
+    </div>
+    ${textField("assessment", "Overall assessment")}
+    ${textField("potentialProject", "Potential project")}
+    <p class="f-hint">Ứng viên sẽ vào benchmark "Ready to Offer vs KPI" và được đếm cho
+      KPI tháng theo ngày ready to offer. Khi có kết quả, bấm Offer / Hire / ✕ ngay trên
+      card ứng viên để cập nhật.</p>
+  `, async (fd) => {
+    const entry = {
+      rtoDate: fd.get("rtoDate"),
+      name: (fd.get("name") || "").trim(),
+      position: fd.get("position"),
+      level: (fd.get("level") || "").trim(),
+      eng: (fd.get("eng") || "").trim(),
+      source: (fd.get("source") || "").trim(),
+      profileLink: (fd.get("profileLink") || "").trim(),
+      interviewDate: fd.get("interviewDate") || "",
+      round: (fd.get("round") || "").trim(),
+      interviewedBy: (fd.get("interviewedBy") || "").trim(),
+      assessment: (fd.get("assessment") || "").trim(),
+      joiningDate: (fd.get("joiningDate") || "").trim(),
+      potentialProject: (fd.get("potentialProject") || "").trim(),
+    };
+    if (!entry.name) throw new Error("Cần nhập tên ứng viên.");
+    if (!entry.rtoDate) throw new Error("Cần chọn ngày ready to offer.");
+    await ctx.api.addRtoEntry(entry);
+    toast(ctx.isDemo ? "DEMO — đã thêm vào bộ nhớ (chưa lưu thật)." : "✓ Đã lưu vào SharePoint.");
+    if (ctx.refreshRto) await ctx.refreshRto();
+  });
+  // Dán từ Teams → parse và điền form (chỉ điền ô đang trống).
+  const form = $("#modal-form");
+  form.querySelector('[name="paste"]').addEventListener("input", (e) => {
+    const p = parseCandidateTicket(e.target.value);
+    if (!Object.keys(p).length) return;
+    const set = (name, val) => {
+      const el = form.querySelector(`[name="${name}"]`);
+      if (el && val && !el.value) el.value = val;
+    };
+    set("name", p.name);
+    set("level", p.level);
+    set("eng", p.eng);
+    set("source", p.source);
+    set("profileLink", /^https?:/i.test(p.profileLink || "") ? p.profileLink : "");
+    set("interviewDate", normalizeDate(p.interviewDate || ""));
+    set("round", p.round);
+    set("interviewedBy", p.interviewedBy);
+    set("assessment", p.assessment);
+    set("joiningDate", p.joiningDate);
+    set("potentialProject", p.potentialProject);
+    // "Frontend Developer" → "Frontend Web" nhờ positions + aliases.
+    const pos = p.position && positionForTitle(p.position, CONFIG.positions, CONFIG.stackAliases);
+    if (pos) form.querySelector('[name="position"]').value = pos;
+  });
+}
+
 export async function openKpiModal() {
   let users = [];
   try { users = await ctx.api.getSiteUsers(); } catch { /* dropdown rỗng vẫn dùng được */ }
@@ -160,7 +293,7 @@ export async function openAdmin() {
   try { data = await ctx.api.getRecentEntries(); }
   catch (e) { sec.innerHTML = `<div class="kpi-empty">Không tải được entries: ${esc(e.message)}</div>`; return; }
 
-  const { funnel, kpi } = data;
+  const { funnel, kpi, rto = [] } = data;
   const week = (iso) => String(iso || "").slice(0, 10);
   // Log theo ngày → checklist "còn thiếu" xét cửa sổ 7 ngày gần nhất
   // (tính từ ngày log mới nhất), không xét đúng 1 ngày.
@@ -200,6 +333,17 @@ export async function openAdmin() {
           <td><button class="btn-del" data-list="funnel" data-id="${r.Id}">🗑</button></td>
         </tr>`).join("")}</tbody>
     </table></div>
+    <h3 class="admin-h3">Ready to Offer entries (${rto.length})</h3>
+    <div class="admin-scroll"><table class="lb-table admin-table">
+      <thead><tr><th>RTO date</th><th>Candidate</th><th>Position</th><th>Level</th><th>Status</th><th>By</th><th></th></tr></thead>
+      <tbody>${rto.map((r) => `
+        <tr>
+          <td>${week(r.RTODate)}</td><td>${esc(r.Title || "")}</td>
+          <td>${esc(r.Position || "")}</td><td>${esc(r.TechLevel || "")}</td>
+          <td>${esc(r.RTOStatus || "")}</td><td>${esc(r.Author?.Title || "")}</td>
+          <td><button class="btn-del" data-list="rto" data-id="${r.Id}">🗑</button></td>
+        </tr>`).join("")}</tbody>
+    </table></div>
     <h3 class="admin-h3">KPI achievements (${kpi.length})</h3>
     <div class="admin-scroll"><table class="lb-table admin-table">
       <thead><tr><th>Month</th><th>Recruiter</th><th>KPI Type</th><th>Candidate</th><th>By</th><th></th></tr></thead>
@@ -233,7 +377,8 @@ export async function openAdmin() {
     if (!confirm("Xóa dòng này? (không hoàn tác được)")) return;
     b.disabled = true;
     try {
-      await ctx.api.deleteItem(b.dataset.list === "funnel" ? CONFIG.funnelList : CONFIG.kpiList, Number(b.dataset.id));
+      const listMap = { funnel: CONFIG.funnelList, kpi: CONFIG.kpiList, rto: CONFIG.rtoList };
+      await ctx.api.deleteItem(listMap[b.dataset.list], Number(b.dataset.id));
       toast(ctx.isDemo ? "DEMO — đã xóa khỏi bộ nhớ." : "✓ Đã xóa.");
       await ctx.reload();
       sec.hidden = true;
@@ -248,8 +393,10 @@ export async function openAdmin() {
 export function initEntryUI(context) {
   ctx = context;
   $("#btn-log-weekly").hidden = false;
+  $("#btn-log-rto").hidden = false;
   $("#btn-log-kpi").hidden = false;
   $("#btn-log-weekly").addEventListener("click", openWeeklyModal);
+  $("#btn-log-rto").addEventListener("click", openRtoModal);
   $("#btn-log-kpi").addEventListener("click", openKpiModal);
   const isAdmin = ctx.isDemo ||
     (ctx.account && (CONFIG.admins || []).includes(ctx.account.username));

@@ -1,6 +1,6 @@
 import { CONFIG } from "./config.js";
 import { DEMO_FUNNEL, DEMO_ACHIEVEMENTS } from "./data-demo.js";
-import { initEntryUI } from "./entry.js";
+import { initEntryUI, openKpiModal, toast } from "./entry.js";
 import {
   filterRows, totals, rates, outcomeDistribution, leaderboard, monthlyKpi,
   positionSnapshots, rtoBenchmark, INTERVIEW_TARGET, RTO_TARGET, KPI_BONUS,
@@ -28,8 +28,9 @@ const state = {
   range: "all", fromDate: null, toDate: null,
   recruiter: "", kpiMonth: null, // "YYYY-MM"
   activeStacks: [], // Admin chọn — benchmark RTO chạy trên danh sách này
-  rtoFetcher: null, // hàm lấy RTO items (demo hoặc Azure Board)
-  rtoItems: null, // cache RTO items sau lần fetch — KPI benchmark dùng lại
+  rtoFetcher: null, // hàm lấy RTO entries (demo hoặc list "TA Ready to Offer")
+  rtoApi: null, // {updateStatus} — chuyển trạng thái ứng viên RTO
+  rtoItems: null, // cache RTO entries sau lần fetch — KPI benchmark dùng lại
 };
 
 const fmtVND = (n) => n.toLocaleString("en-US") + " ₫";
@@ -200,10 +201,9 @@ function renderKpiBenchmark() {
   const container = $("#kpi-rows");
   if (!state.kpiMonth) { container.innerHTML = `<div class="kpi-empty">No data yet.</div>`; return; }
 
-  // RTO live từ Azure Board chỉ có "hiện trạng" — áp cho tháng hiện tại;
-  // tháng quá khứ fallback về cột Offers của funnel (board không có lịch sử).
-  const nowMonth = new Date().toISOString().slice(0, 7);
-  const rtoItems = state.rtoItems && state.kpiMonth === nowMonth
+  // RTO từ list "TA Ready to Offer" có RTODate → đếm theo tháng được cho
+  // MỌI tháng (monthlyKpi tự lọc theo rtoDate).
+  const rtoItems = state.rtoItems
     ? state.rtoItems.filter((i) => !(CONFIG.excludeRecruiters || []).includes(i.recruiter))
     : null;
 
@@ -219,7 +219,7 @@ function renderKpiBenchmark() {
       </div>
       ${progressCell("Interviews", x.interviews, INTERVIEW_TARGET, x.interviewsBonus || 1000000)}
       ${progressCell("Ready to Offer", x.rto, RTO_TARGET, x.rtoBonus || 1000000,
-        x.rtoLive ? "AZURE BOARD" : "")}
+        x.rtoLive ? "TA LOG" : "")}
       <div class="kpi-cell">
         <div class="progress-label"><span>Success Hires</span><span><b>${x.achievements.length}</b></span></div>
         ${x.achievements.length
@@ -300,37 +300,52 @@ function renderPositions() {
   }).join("");
 }
 
-// Card "Ready to Offer vs KPI" — RTO items live từ Azure Board, benchmark
-// trên danh sách active stacks do Admin chọn (kể cả stack 0 ứng viên).
-// Load độc lập: board lỗi/chưa cấp quyền thì phần còn lại vẫn chạy.
+// Card "Ready to Offer vs KPI" — nguồn: list "TA Ready to Offer" do TA log
+// trên platform (nút ＋ Log RTO). Stock benchmark chỉ đếm ứng viên status
+// Ready; KPI tháng đếm theo RTODate (flow) nên không phụ thuộc status.
+// Load độc lập: list lỗi thì phần còn lại của dashboard vẫn chạy.
 async function renderRtoBenchmark() {
-  const { rtoTargetMin: min, rtoTargetMax: max } = CONFIG.ado;
+  const { rtoTargetMin: min, rtoTargetMax: max } = CONFIG;
   const el = $("#offer-pipeline");
   el.hidden = false;
   const head = `<div class="card-head"><h2>🎯 Ready to Offer vs KPI</h2>
-    <span class="card-sub">TARGET ${min}–${max} / ACTIVE STACK · AZURE BOARD</span></div>`;
+    <span class="card-sub">TARGET ${min}–${max} / ACTIVE STACK · TA LOG</span></div>`;
+  el.innerHTML = `${head}<div class="kpi-empty">Loading…</div>`;
+  let items;
+  try { items = await state.rtoFetcher(); }
+  catch (e) {
+    el.innerHTML = `${head}<div class="kpi-empty">Không tải được list RTO — ${esc(e.message)}</div>`;
+    return;
+  }
+  // Đồng bộ cột "Ready to Offer" của KPI benchmark với data log này.
+  state.rtoItems = items;
+  renderKpiBenchmark();
   if (!state.activeStacks.length) {
     el.innerHTML = `${head}<div class="kpi-empty">Admin chưa chọn active tech stacks —
       vào <b>Admin → Active tech stacks</b> để tick các vị trí đang tuyển.</div>`;
     return;
   }
-  el.innerHTML = `${head}<div class="kpi-empty">Loading…</div>`;
-  let items;
-  try { items = await state.rtoFetcher(); }
-  catch (e) {
-    el.innerHTML = `${head}<div class="kpi-empty">Không tải được từ Azure Board — ${esc(e.message)}</div>`;
-    return;
-  }
-  // Đồng bộ cột "Ready to Offer" của KPI benchmark với đúng data board này.
-  state.rtoItems = items;
-  renderKpiBenchmark();
-  const bench = rtoBenchmark(items, {
-    activeStacks: state.activeStacks, aliases: CONFIG.stackAliases, min,
-  });
+  const ready = items.filter((i) => i.status === "Ready");
+  const bench = rtoBenchmark(ready, { activeStacks: state.activeStacks, min });
   const totalRto = bench.reduce((s, b) => s + b.rto, 0);
   const withTarget = bench.filter((b) => !b.noTarget);
   const behind = withTarget.filter((b) => b.gap > 0).length;
   const ok = withTarget.length - behind;
+  // Mỗi ứng viên có nút chuyển trạng thái — rời stock khi đã offer/hire/reject.
+  const candidate = (c) => `
+    <div class="rto-cand" data-id="${c.id}">
+      <div class="rto-cand-info">
+        ${c.profileLink ? `<a href="${esc(c.profileLink)}" target="_blank" rel="noopener">${esc(c.name)}</a>`
+          : `<b>${esc(c.name)}</b>`}
+        <small>${esc([c.level, c.eng && `EN ${c.eng}`].filter(Boolean).join(" · "))}</small>
+        <small class="rto-meta">${esc(c.recruiter)} · RTO ${fmtDate(c.rtoDate)}</small>
+      </div>
+      <div class="rto-actions">
+        <button data-status="Offered" title="Đã gửi offer">Offer</button>
+        <button data-status="Hired" title="Đã nhận việc">Hire</button>
+        <button data-status="Rejected" title="Từ chối / rớt">✕</button>
+      </div>
+    </div>`;
   // Cùng ngôn ngữ thiết kế với section Open Positions: hàng chips + lưới card.
   el.innerHTML = `${head}
     <div class="pos-stats">
@@ -343,17 +358,32 @@ async function renderRtoBenchmark() {
         <div class="pos-card ${b.noTarget ? "filled" : (b.gap ? "red" : "ontrack")}">
           <div class="pos-head"><h3>${esc(b.stack)}</h3>
             ${b.noTarget
-              ? `<span class="pos-badge filled">${b.rto} · NGOÀI DANH SÁCH</span>`
+              ? `<span class="pos-badge filled">${b.rto} · NGOÀI ACTIVE</span>`
               : `<span class="pos-badge ${b.gap ? "red" : "ontrack"}">
                   ${b.gap ? `${b.rto}/${min} · CẦN THÊM ${b.gap}` : `${b.rto}/${min} ✓`}</span>`}
           </div>
           ${b.noTarget ? "" : `<div class="progress"><i class="${b.gap ? "" : "hit"}"
             style="width:${Math.min(100, (b.rto / min) * 100)}%"></i></div>`}
-          ${b.candidates.length ? `<div class="rto-names">${b.candidates.map((c) =>
-            `<a href="${esc(c.url)}" target="_blank" rel="noopener" title="${esc(c.title)}">${esc(c.name)}</a> <small>(${esc(c.recruiter)})</small>`
-          ).join("<br>")}</div>` : `<div class="rto-names rto-empty">Chưa có ứng viên chờ offer</div>`}
+          ${b.candidates.length ? `<div class="rto-names">${b.candidates.map(candidate).join("")}</div>`
+            : `<div class="rto-names rto-empty">Chưa có ứng viên chờ offer</div>`}
         </div>`).join("")}
     </div>`;
+  el.querySelectorAll(".rto-actions button").forEach((btn) => btn.addEventListener("click", async () => {
+    const id = Number(btn.closest(".rto-cand").dataset.id);
+    const status = btn.dataset.status;
+    const cand = items.find((i) => i.id === id);
+    if (!confirm(`${esc(cand?.name || "")} → ${status}? Ứng viên sẽ rời khỏi benchmark chờ offer.`)) return;
+    btn.disabled = true;
+    try {
+      await state.rtoApi.updateStatus(id, status);
+      toast(`✓ ${cand?.name || ""} → ${status}.`);
+      await renderRtoBenchmark(); // refetch + đồng bộ lại KPI
+      if (status === "Hired") openKpiModal(); // hire xong → log luôn achievement
+    } catch (e) {
+      toast("Không cập nhật được: " + e.message, false);
+      btn.disabled = false;
+    }
+  }));
 }
 
 function renderAll() {
@@ -423,6 +453,9 @@ function demoApi() {
     .map((name, i) => ({ id: i + 1, name, email: i === 0 ? "demo" : name.toLowerCase() }));
   return {
     addFunnelRow: async (f) => { state.rows.push({ ...f, recruiter: "Demo User" }); },
+    addRtoEntry: async (f) => {
+      state._demoRto.push({ ...f, id: Date.now(), recruiter: "Demo User", status: "Ready" });
+    },
     addAchievement: async (f) => {
       state.achievements.push({
         month: f.month, kpiType: f.kpiType, title: f.title,
@@ -462,21 +495,31 @@ async function boot() {
     initEntryUI({
       isDemo: true, account: { name: "Demo User", username: "demo" }, api: demoApi(),
       reload: async () => { fillRecruiterFilter(); renderAll(); },
+      refreshRto: () => renderRtoBenchmark(),
       stacks: {
         get: () => state.activeStacks,
         save: async (arr) => { state.activeStacks = arr; renderRtoBenchmark(); },
       },
     });
     state.activeStacks = ["Java", "Backend Web", "BA", "DevOps", "QA"];
-    state.rtoFetcher = async () => [
-      { id: 1, title: "M1 Java (EN 6.0) / SU - Nguyen Van A", recruiter: "AnhTD", url: "#" },
-      { id: 2, title: "M2/S1 Java (EN 6.0) / TO - Tran Thi B", recruiter: "MyLTP", url: "#" },
-      { id: 3, title: "M1 BA (EN 6.0) / TO - Le Van C", recruiter: "LyPK", url: "#" },
-      { id: 4, title: "M1+ BE Web (EN 7.0) / SU - Pham Van D", recruiter: "DucPM", url: "#" },
-      { id: 5, title: "M1 QA / TO - E", url: "#" }, { id: 6, title: "M1 QA / TO - F", url: "#" },
-      { id: 7, title: "M1 QA / TO - G", url: "#" }, { id: 8, title: "M1 QA / TO - H", url: "#" },
-      { id: 9, title: "VB Growth Assistant (EN 6.0) / BD - I", recruiter: "VietBN", url: "#" },
+    // Demo RTO: mảng in-memory, cùng shape với getRtoEntries() của graph.js.
+    const demoRto = [
+      { id: 1, name: "Nguyen Van A", position: "Java", level: "M1", eng: "6.0", recruiter: "AnhTD", status: "Ready", rtoDate: "2026-07-20", profileLink: "" },
+      { id: 2, name: "Tran Thi B", position: "Java", level: "M2", eng: "6.5", recruiter: "MyLTP", status: "Ready", rtoDate: "2026-07-22", profileLink: "" },
+      { id: 3, name: "Le Van C", position: "BA", level: "M1", eng: "6.0", recruiter: "LyPK", status: "Ready", rtoDate: "2026-07-25", profileLink: "" },
+      { id: 4, name: "Pham Van D", position: "Backend Web", level: "M1+", eng: "7.0", recruiter: "DucPM", status: "Ready", rtoDate: "2026-07-26", profileLink: "" },
+      { id: 5, name: "Hoang Thi E", position: "QA", level: "M1", eng: "5.5", recruiter: "AnhTD", status: "Ready", rtoDate: "2026-07-27", profileLink: "" },
+      { id: 6, name: "Vu Van F", position: "QA", level: "M2", eng: "6.0", recruiter: "MyLTP", status: "Offered", rtoDate: "2026-07-15", profileLink: "" },
+      { id: 7, name: "Dang Thi G", position: "MKT", level: "", eng: "6.0", recruiter: "VietBN", status: "Ready", rtoDate: "2026-07-24", profileLink: "" },
     ];
+    state._demoRto = demoRto;
+    state.rtoFetcher = async () => demoRto.slice();
+    state.rtoApi = {
+      updateStatus: async (id, status) => {
+        const it = demoRto.find((i) => i.id === id);
+        if (it) it.status = status;
+      },
+    };
     renderRtoBenchmark();
     return;
   }
@@ -504,6 +547,7 @@ async function boot() {
           account: graph.currentAccount(),
           api: graph,
           reload: loadDashboard,
+          refreshRto: () => renderRtoBenchmark(),
           stacks: {
             get: () => state.activeStacks,
             save: async (arr) => {
@@ -514,11 +558,9 @@ async function boot() {
           },
         });
         (async () => {
-          try {
-            const ado = await import("./ado.js");
-            state.rtoFetcher = ado.getRtoItems;
-            state.activeStacks = await graph.getActiveStacks().catch(() => []);
-          } catch { state.rtoFetcher = async () => []; }
+          state.rtoFetcher = graph.getRtoEntries;
+          state.rtoApi = { updateStatus: graph.updateRtoStatus };
+          state.activeStacks = await graph.getActiveStacks().catch(() => []);
           renderRtoBenchmark();
         })();
       }

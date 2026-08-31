@@ -14,16 +14,13 @@ export const CONFIG = {
   interviewWeeklyTarget: 5,
   // Email được thấy màn Admin (xem/xóa mọi entry).
   admins: ["hong.bui@eastgate-software.com"],
-  // Azure DevOps board — nguồn live cho Ready-to-offer.
-  // KPI: luôn có rtoTargetMin–rtoTargetMax ứng viên RTO cho mỗi tech stack
-  // đang tuyển (active = có card ở 1 trong các cột activeColumns).
-  ado: {
-    org: "eastgate-software",
-    project: "EGS - Resources Process",
-    rtoColumn: "TA | S3.1: Ready-to-offer",
-    rtoTargetMin: 4,
-    rtoTargetMax: 5,
-  },
+  // Ready to Offer — TA log trực tiếp trên platform (list SharePoint bên
+  // dưới), không query Azure Board nữa (board không có lịch sử, ticket đổi
+  // cột là mất dấu). KPI: luôn có rtoTargetMin–rtoTargetMax ứng viên đang
+  // chờ offer cho mỗi tech stack active.
+  rtoList: "TA Ready to Offer",
+  rtoTargetMin: 4,
+  rtoTargetMax: 5,
   // Map title trên board → Position (khi cách viết khác tên position).
   stackAliases: {
     "Backend Web": ["BE Web", "BE", "Backend"],
