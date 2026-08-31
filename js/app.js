@@ -304,12 +304,65 @@ function renderPositions() {
 // trên platform (nút ＋ Log RTO). Stock benchmark chỉ đếm ứng viên status
 // Ready; KPI tháng đếm theo RTODate (flow) nên không phụ thuộc status.
 // Load độc lập: list lỗi thì phần còn lại của dashboard vẫn chạy.
+// Danh bạ RTO: TOÀN BỘ ứng viên đã log (mọi trạng thái), nhóm theo role —
+// khác card benchmark (chỉ đếm Ready + chỉ active stacks).
+function openRtoDirectory(items) {
+  const byPos = new Map();
+  for (const it of items) {
+    if (!byPos.has(it.position)) byPos.set(it.position, []);
+    byPos.get(it.position).push(it);
+  }
+  const groups = [...byPos.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  const counts = { Ready: 0, Offered: 0, Hired: 0, Rejected: 0 };
+  items.forEach((i) => { counts[i.status] = (counts[i.status] || 0) + 1; });
+  const badge = (s) => `<span class="rto-status s-${s.toLowerCase()}">${s === "Ready" ? "Chờ offer" : s}</span>`;
+  const row = (c) => `
+    <tr class="${c.status !== "Ready" ? "muted-row" : ""}">
+      <td>${c.profileLink ? `<a href="${esc(c.profileLink)}" target="_blank" rel="noopener">${esc(c.name)}</a>` : esc(c.name)}</td>
+      <td>${esc(c.level || "—")}</td>
+      <td>${esc(c.eng || "—")}</td>
+      <td>${esc(c.recruiter)}</td>
+      <td>${c.rtoDate ? fmtDate(c.rtoDate) : "—"}</td>
+      <td>${badge(c.status)}</td>
+    </tr>`;
+  $("#modal-root").innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal modal-wide">
+        <div class="modal-head"><h2>☰ Ứng viên Ready to Offer theo role</h2>
+          <button class="btn-icon" data-close>✕</button></div>
+        <div class="pos-stats">
+          <span class="pos-chip"><b>${items.length}</b> đã log</span>
+          <span class="pos-chip green"><b>${counts.Ready}</b> đang chờ offer</span>
+          <span class="pos-chip"><b>${counts.Offered}</b> offered</span>
+          <span class="pos-chip teal"><b>${counts.Hired}</b> hired</span>
+          <span class="pos-chip red"><b>${counts.Rejected}</b> rejected</span>
+        </div>
+        ${groups.length ? groups.map(([pos, list]) => `
+          <h3 class="admin-h3">${esc(pos)} <small>(${list.filter((c) => c.status === "Ready").length} chờ offer / ${list.length} tổng)</small></h3>
+          <div class="admin-scroll"><table class="lb-table admin-table">
+            <thead><tr><th>Candidate</th><th>Level</th><th>ENG</th><th>Recruiter</th><th>RTO date</th><th>Status</th></tr></thead>
+            <tbody>${list.slice().sort((a, b) => (a.status === "Ready" ? 0 : 1) - (b.status === "Ready" ? 0 : 1) || b.rtoDate.localeCompare(a.rtoDate)).map(row).join("")}</tbody>
+          </table></div>`).join("")
+          : `<div class="kpi-empty">Chưa có ứng viên nào được log — dùng nút ＋ Log RTO.</div>`}
+      </div>
+    </div>`;
+  const root = $("#modal-root");
+  root.querySelector("[data-close]").addEventListener("click", () => { root.innerHTML = ""; });
+  root.querySelector(".modal-overlay").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) root.innerHTML = "";
+  });
+}
+
 async function renderRtoBenchmark() {
   const { rtoTargetMin: min, rtoTargetMax: max } = CONFIG;
   const el = $("#offer-pipeline");
   el.hidden = false;
+  el.onclick = (e) => { if (e.target.closest("#rto-viewall")) openRtoDirectory(state.rtoItems || []); };
   const head = `<div class="card-head"><h2>🎯 Ready to Offer vs KPI</h2>
-    <span class="card-sub">TARGET ${min}–${max} / ACTIVE STACK · TA LOG</span></div>`;
+    <div class="rto-head-right">
+      <button class="btn-plain" id="rto-viewall">☰ Danh sách theo role</button>
+      <span class="card-sub">TARGET ${min}–${max} / ACTIVE STACK · TA LOG</span>
+    </div></div>`;
   el.innerHTML = `${head}<div class="kpi-empty">Loading…</div>`;
   let items;
   try { items = await state.rtoFetcher(); }
