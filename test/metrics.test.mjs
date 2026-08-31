@@ -124,23 +124,24 @@ test("monthlyKpi: tháng không có data → mảng rỗng", () => {
   assert.deepEqual(monthlyKpi(rows, achievements, "2025-01"), []);
 });
 
-test("monthlyKpi + rtoItems: RTO đếm theo board, không theo funnel Offers", () => {
+test("monthlyKpi + rtoItems: đếm theo rtoDate trong tháng (flow), status không ảnh hưởng", () => {
   const items = [
-    { title: "M1 Java / SU - A", recruiter: "AnhTD" },
-    { title: "M1 Java / SU - B", recruiter: "AnhTD" },
-    { title: "M1 BA / TO - C", recruiter: "MyLTP" },
-    { title: "M1 QA / TO - D" }, // không có recruiter → bỏ qua
+    { name: "A", recruiter: "AnhTD", rtoDate: "2026-06-05", status: "Ready" },
+    { name: "B", recruiter: "AnhTD", rtoDate: "2026-06-20", status: "Hired" },   // đã hire vẫn tính cho tháng 6
+    { name: "C", recruiter: "MyLTP", rtoDate: "2026-06-11", status: "Rejected" },
+    { name: "D", recruiter: "AnhTD", rtoDate: "2026-07-01", status: "Ready" },   // tháng khác → không tính
+    { name: "E", rtoDate: "2026-06-12", status: "Ready" },                        // không có recruiter → bỏ qua
   ];
   const kpi = monthlyKpi(rows, achievements, "2026-06", { rtoItems: items });
   const anh = kpi.find((x) => x.recruiter === "AnhTD");
-  assert.equal(anh.rto, 2); // từ board, không phải 9 offers của funnel
+  assert.equal(anh.rto, 2); // từ log, không phải 9 offers của funnel
   assert.equal(anh.rtoLive, true);
   assert.equal(anh.rtoBonus, 0); // 2 < 8
   assert.equal(anh.topupBonus, 0); // mất top-up vì RTO chưa đạt
 });
 
-test("monthlyKpi + rtoItems: recruiter chỉ có trên board vẫn có hàng", () => {
-  const items = [{ title: "M1 DevOps / SU - X", recruiter: "NewGuy" }];
+test("monthlyKpi + rtoItems: recruiter chỉ có trong log RTO vẫn có hàng", () => {
+  const items = [{ name: "X", recruiter: "NewGuy", rtoDate: "2026-06-09", status: "Ready" }];
   const kpi = monthlyKpi(rows, achievements, "2026-06", { rtoItems: items });
   const ng = kpi.find((x) => x.recruiter === "NewGuy");
   assert.ok(ng);
@@ -311,23 +312,61 @@ test("positionForTitle: match title vào position qua tên + alias, ưu tiên to
   }
 });
 
-test("rtoBenchmark: mọi active stack đều có hàng (kể cả 0 RTO), unmatched vào Khác", () => {
+test("rtoBenchmark: mọi active stack đều có hàng (kể cả 0 RTO), position ngoài active vào Khác", () => {
   const rtoItems = [
-    { title: "M1 Java (EN 6.0) / SU - A", recruiter: "Thuy" },
-    { title: "S1/S2 C#/Java TL / TO - B", recruiter: "Thu" },
-    { title: "M1 BA (EN 6.0) / TO - C", recruiter: "Trang" },
-    { title: "VB Growth Assistant / BD - D", recruiter: "An" },
+    { name: "A", position: "Java", recruiter: "Thuy" },
+    { name: "B", position: "Java", recruiter: "Thu" },
+    { name: "C", position: "BA", recruiter: "Trang" },
+    { name: "D", position: "MKT", recruiter: "An" }, // MKT không active
   ];
-  const b = rtoBenchmark(rtoItems, { activeStacks: ["Java", "BA", "DevOps"], aliases: {}, min: 4 });
+  const b = rtoBenchmark(rtoItems, { activeStacks: ["Java", "BA", "DevOps"], min: 4 });
   assert.deepEqual(b.map((x) => [x.stack, x.rto, x.gap]), [
     ["DevOps", 0, 4],   // 0 RTO vẫn hiện, thiếu nhiều nhất trước
     ["BA", 1, 3],
     ["Java", 2, 2],
-    ["Khác", 1, 0],     // unmatched, không có target, xếp cuối
+    ["Khác", 1, 0],     // ngoài active, không có target, xếp cuối
   ]);
   assert.equal(b[3].noTarget, true);
+  assert.equal(b[2].candidates[0].name, "A"); // giữ nguyên item để UI vẽ card
 });
 
 test("rtoBenchmark: activeStacks rỗng → mảng rỗng (UI hiện hướng dẫn)", () => {
-  assert.deepEqual(rtoBenchmark([{ title: "M1 Java / TO - A" }], { activeStacks: [], aliases: {}, min: 4 }), []);
+  assert.deepEqual(rtoBenchmark([{ name: "A", position: "Java" }], { activeStacks: [], min: 4 }), []);
+});
+
+// ---- parseCandidateTicket (Log RTO — dán từ Teams) ----
+import { parseCandidateTicket } from "../js/entry.js";
+
+test("parseCandidateTicket: parse bảng Candidate Info copy từ Teams", () => {
+  const pasted = [
+    "CANDIDATE TICKET | PENDING OFFER DECISION",
+    "CANDIDATE",
+    "Name\tNguyen Van X",
+    "Position\tFrontend Developer",
+    "Technical Level\tM2",
+    "ENG Score (ELSA)\t7.0",
+    "Source\tHRHunt - An Nguyen",
+    "Profile Link\t[ Link ]",
+    "INTERVIEW SUMMARY",
+    "Interview Date\t",
+    "Round\t1 / ?",
+    "Interviewed By\t",
+    "Overall Assessment\t",
+    "OFFER INPUTS",
+    "Expected Salary\t37-38M Gross",
+    "Benchmark (Member 1)\t",
+    "Project Budget\t",
+    "Possible Joining Date\t~1 tháng",
+    "Potential Project\t",
+  ].join("\n");
+  const p = parseCandidateTicket(pasted);
+  assert.equal(p.name, "Nguyen Van X");
+  assert.equal(p.position, "Frontend Developer");
+  assert.equal(p.level, "M2");
+  assert.equal(p.eng, "7.0");
+  assert.equal(p.source, "HRHunt - An Nguyen");
+  assert.equal(p.round, "1 / ?");
+  assert.equal(p.joiningDate, "~1 tháng");
+  assert.equal(p.expectedSalary, undefined); // nhóm lương không được parse
+  assert.equal(p.interviewDate, undefined);  // ô trống → không set
 });
